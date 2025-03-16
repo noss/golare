@@ -51,7 +51,7 @@ capture(Capture) ->
         gen_statem:call(name(), {capture, Capture}, 5000)
     catch
         error:noproc ->
-            {ok, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
+            {ok, <<16#dead:16,16#feed:16,0:96>>}
     end.
 
 %%%===================================================================
@@ -114,12 +114,12 @@ sending(info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}=Resp, #da
             keep_state_and_data;
         429 ->
             erlang:display({retry_after, Resp}),
-            RetryAfter= proplists:get_value(<<"retry-after">>, Headers, <<"20">>),
+            RetryAfter= proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
             Seconds = binary_to_integer(RetryAfter),
             NextEvent = {next_event, internal, {retry_after, Seconds}},
-            %%lists:foreach(fun (Ref) ->
-            %%    ok = gun:cancel(Conn, Ref)
-            %%end, lists:delete(StreamRef, Data#data.posted)),
+            lists:foreach(fun (Ref) ->
+                ok = gun:cancel(Conn, Ref)
+            end, lists:delete(StreamRef, Data#data.posted)),
             NextData = Data#data{posted = []},
             {next_state, rate_limited, NextData, [NextEvent]}
     end;
