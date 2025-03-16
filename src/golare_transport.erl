@@ -66,6 +66,7 @@ init([]) ->
     {ok, Conn} = gun:open(Host, Port, Opts),
     Mref = monitor(process, Conn),
     Q = queue:new(),
+    quickrand_cache:init(),
     {ok, connecting, #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = Q}, []}.
 
 terminate(_Reason, _State, _Data) ->
@@ -203,7 +204,7 @@ capture_http_headers() ->
     }.
 
 enqueue(Data, {event, Event}) ->
-    EventId = uuid:get_v4(),
+    EventId = uuid:get_v4(cached),
     Q1 = queue:cons(#envelope{event_id = EventId, type = event, payload = Event}, Data#data.q),
     {Data#data{q = overflow(Q1, Data#data.max_queued)}, EventId}.
 
