@@ -33,7 +33,12 @@ log(#{level := Level}=LogEvent, _Config) ->
         {ok, _EventId} = golare:capture_event(Event)
     catch 
         Type:Rsn:Trace ->
-            Crash = #{logentry => #{formatted => iolist_to_binary(io_lib:print({Type, Rsn, Trace}))}},
+            Crash =
+                #{errors =>
+                    #{type => unknown_error,
+                      value => iolist_to_binary(io_lib:print({Type, Rsn, Trace})),
+                      details => <<"crash in golare_logger_h">>
+                 }},
             golare:capture_event(Crash)
     end.
 
@@ -54,21 +59,23 @@ event_timestamp(#{meta := #{time := MicrosecondEpoch}}) ->
     Rfc3339 = calendar:system_time_to_rfc3339(MicrosecondEpoch, Opts),
     iolist_to_binary(Rfc3339).
 
-logger_name(#{meta := #{mfa := MFA}}) ->
-    iolist_to_binary(io_lib:print(MFA));
+logger_name(#{meta := #{mfa := {M, F, A}}}) ->
+    iolist_to_binary(io_lib:format("~s:~s/~b", [M, F, A]));
 logger_name(_) ->
     null.
 
-logentry(#{msg := Msg, meta := _Meta}) ->
+logentry(#{msg := Msg, meta := Meta}) ->
     case Msg of
         {report, Report} ->
-            #{formatted => iolist_to_unicode_binary(io_lib:print(Report, 1, 80, 4))};
+            #{formatted => iolist_to_unicode_binary(io_lib:print(Report, 1, 80, 5))};
         {string, Raw} ->
-            #{formatted => iolist_to_unicode_binary(Raw)};
+            #{formatted => iolist_to_unicode_binary(Raw),
+              params => [iolist_to_unicode_binary(io_lib:print(Meta, 1, 80, 5))]
+            };
         {FormatString, Params} ->
             #{formatted => iolist_to_unicode_binary(io_lib:format(FormatString, Params)),
               message => iolist_to_unicode_binary(FormatString),
-              params => [iolist_to_unicode_binary(io_lib:print(P, 1, 80, 3)) || P <- Params]
+              params => [iolist_to_unicode_binary(io_lib:print(P, 1, 80, 5)) || P <- Params]
             }
     end. 
 
