@@ -35,7 +35,8 @@ set_defaults() ->
             platform => fun golare_scope:global_platform/0,
             environment => fun golare_scope:global_environment/0,
             release => fun golare_scope:global_release/0,
-            server_name => fun golare_scope:global_server_name/0
+            server_name => fun golare_scope:global_server_name/0,
+            modules => fun golare_scope:global_modules/0
     },
     ScopeOverride = application:get_env(golare, global_scope, #{}),
     DefaultConfig = maps:merge(DefaultScope, ScopeOverride),
