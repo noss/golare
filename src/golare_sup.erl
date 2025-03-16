@@ -38,6 +38,6 @@ init([]) ->
 
 connection_childspec() ->
     #{
-        id => connection,
-        start => {golare_connection, start_link, []}
+        id => transport,
+        start => {golare_transport, start_link, []}
     }.

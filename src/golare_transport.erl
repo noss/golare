@@ -3,7 +3,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(golare_connection).
+-module(golare_transport).
 
 -behaviour(gen_statem).
 
