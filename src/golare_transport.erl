@@ -186,12 +186,16 @@ post_capture(#data{conn=Conn, dsn=DSN}, #envelope{event_id = RawEventId, type = 
     StreamRef = gun:post(Conn, ["/api/", ProjectId, "/envelope/"], capture_http_headers()),
     EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
     EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN}),
-    Payload = json:encode(Event),
+    Payload = json:encode(event_defaults(Event)),
     Item = json:encode(#{type => Type, length => iolist_size(Payload)}),
     Body = iolist_to_binary([EnvelopeHeader, $\n, Item, $\n, Payload]),
     erlang:display({posting, Body}),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
+
+event_defaults(Event) ->
+    Defaults = persistent_term:get({golare, defaults}, #{}),
+    maps:merge(Defaults, Event).
 
 capture_http_headers() ->
     #{
