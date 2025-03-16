@@ -46,12 +46,12 @@ name() -> ?MODULE.
 start_link() ->
     gen_statem:start_link({local, name()}, ?MODULE, [], []).
 
-capture(Event) ->
+capture(Capture) ->
     try
-        gen_statem:call(name(), {capture, Event}, 5000)
+        gen_statem:call(name(), {capture, Capture}, 5000)
     catch
         error:noproc ->
-            ok
+            {ok, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
     end.
 
 %%%===================================================================
@@ -188,6 +188,7 @@ post_capture(#data{conn=Conn, dsn=DSN}, #envelope{event_id = RawEventId, type = 
     Payload = json:encode(Event),
     Item = json:encode(#{type => Type, length => iolist_size(Payload)}),
     Body = iolist_to_binary([EnvelopeHeader, $\n, Item, $\n, Payload]),
+    erlang:display({posting, Body}),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
 
