@@ -22,10 +22,13 @@
 -define(SERVER, ?MODULE).
 
 -record(data, {
+        max_queued = 100 :: pos_integer(),
+        max_pipeline = 4 :: pos_integer(),
         dsn :: binary(),
         conn :: pid() | undefined,
         conn_mref,
-        q :: queue:queue()
+        q :: queue:queue(),
+        posted = [] :: list(gun:stream_ref())
     }).
 
 name() -> ?MODULE.
@@ -83,8 +86,8 @@ available(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data). 
 
 sending(internal, send, #data{q = Q0} = Data) ->
-    {ok, _StreamRef} = post_capture(Data, queue:last(Q0)),
-    {keep_state, Data#data{q = queue:init(Q0)}};
+    {ok, StreamRef} = post_capture(Data, queue:last(Q0)),
+    {keep_state, Data#data{q = queue:init(Q0), posted = [StreamRef | Data#data.posted]}};
 sending(info, {gun_response, Conn, _StreamRef, _IsFin, Status, _Headers}=Resp, #data{conn = Conn}) ->
     case Status of
         200 ->
@@ -96,13 +99,20 @@ sending(info, {gun_response, Conn, _StreamRef, _IsFin, Status, _Headers}=Resp, #
 sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk}=Resp, #data{conn = Conn}) ->
     erlang:display(Resp),
     keep_state_and_data;
-sending(info, {gun_data, Conn, _StreamRef, fin, _BodyChunk}=Resp, #data{conn = Conn, q = Q} = Data) ->
+sending(info, {gun_data, Conn, StreamRef, fin, _BodyChunk}=Resp, #data{conn = Conn, q = Q} = Data) ->
     erlang:display(Resp),
+    
+    Posted = lists:delete(StreamRef, Data#data.posted),
+    NextData = Data#data{posted = Posted},
     case queue:is_empty(Q) of
+        true when Posted /= [] ->
+            {keep_state, NextData};
         true ->
-            {next_state, available, Data};
+            {next_state, available, NextData};
+        false when length(Posted) > Data#data.max_pipeline ->
+            {keep_state, NextData};
         false ->
-            {keep_state, Data, [{next_event, internal, send}]}
+            {keep_state, NextData, [{next_event, internal, send}]}
     end;
 sending(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data). 
@@ -112,7 +122,7 @@ sending(EventType, EventContent, Data) ->
 %%%===================================================================
 
 handle_event({call, From}, {capture, Event}, #data{q = Q0} = Data) ->
-    Q1 = max_len(queue:cons(Event, Q0), 100), 
+    Q1 = max_len(queue:cons(Event, Q0), Data#data.max_queued), 
     {keep_state, Data#data{q = Q1}, [{reply, From, ok}]};
 handle_event(info, {'DOWN', Mref, process, Conn, Reason}, #data{conn_mref = Mref, conn=Conn}) ->
     exit(Reason);

@@ -2,7 +2,7 @@
     {description, "A sentry SDK for erlang"},
     {vsn, "0.1.0"},
     {registered, []},
-    {mod, {golare_app, []}},
+    {mod, {golare, []}},
     {applications, [
         kernel,
         stdlib,

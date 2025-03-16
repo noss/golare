@@ -3,7 +3,7 @@
 %% @end
 %%%-------------------------------------------------------------------
 
--module(golare_app).
+-module(golare).
 
 -behaviour(application).
 
