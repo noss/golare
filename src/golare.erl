@@ -11,8 +11,13 @@
 
 -export([capture_event/1]).
 
+-export([test_logger/1]).
+
+-include_lib("kernel/include/logger.hrl").
+
 start(normal, _StartArgs) ->
-    set_defaults(),
+    ok = set_defaults(),
+    ok = add_logger(),
     golare_sup:start_link().
 
 stop(_State) ->
@@ -20,6 +25,9 @@ stop(_State) ->
 
 capture_event(Event) ->
     golare_transport:capture({event, Event}).
+
+test_logger(Event) ->
+    ?LOG_ERROR(Event).
 
 set_defaults() ->
     DefaultScope = #{
@@ -38,3 +46,12 @@ set_defaults() ->
             Value
     end,
     persistent_term:put({golare, defaults}, maps:map(DefaultFun, DefaultConfig)).
+
+add_logger() ->
+    Config = #{
+        config => #{},
+        level => warning,
+        filter_default => log,
+        filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
+    },
+    ok = logger:add_handler(golare, golare_logger_h, Config).
