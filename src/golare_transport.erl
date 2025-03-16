@@ -46,12 +46,13 @@ name() -> ?MODULE.
 start_link() ->
     gen_statem:start_link({local, name()}, ?MODULE, [], []).
 
+-spec capture(term()) -> {ok, EventId :: uuid:uuid() | down}.
 capture(Capture) ->
     try
         gen_statem:call(name(), {capture, Capture}, 5000)
     catch
         error:noproc ->
-            {ok, <<16#dead:16,16#feed:16,0:96>>}
+            {ok, down}
     end.
 
 %%%===================================================================
