@@ -186,13 +186,46 @@ post_capture(#data{conn=Conn, dsn=DSN}, #envelope{event_id = RawEventId, type = 
     #{path := "/" ++ ProjectId} = uri_string:parse(binary_to_list(DSN)),
     StreamRef = gun:post(Conn, ["/api/", ProjectId, "/envelope/"], capture_http_headers()),
     EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
+    Items = encode_items(Type, Event),
     EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN}),
-    Payload = json:encode(event_defaults(Event)),
-    Item = json:encode(#{type => Type, length => iolist_size(Payload)}),
-    Body = iolist_to_binary([EnvelopeHeader, $\n, Item, $\n, Payload]),
+    Body = iolist_to_binary([EnvelopeHeader, $\n, Items]),
     erlang:display({posting, Body}),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
+
+encode_items(ItemType, Event) ->
+    try
+        Item = json:encode(event_defaults(Event)),
+        ItemHeader = json:encode(#{type => ItemType, length => iolist_size(Item)}),
+        [ItemHeader, $\n, Item]
+    catch
+        Exception:Reason:Stacktrace ->
+            Errors = #{
+                type => Exception,
+                value => iolist_to_binary(io_lib:print(Reason)),
+                details => <<"failed to json encode event">>
+            },
+            LogEntry = #{
+                formatted => <<"Failed to encode message">>
+            },
+            ErrEvent = json:encode(event_defaults(#{errors => [Errors], logentry => LogEntry})),
+            ErrHeader = json:encode(#{type => event, length => iolist_size(ErrEvent)}),
+            Attachment =
+                [io_lib:print(Reason), $\n, $\n,
+                 <<"Raw event:\n">>, io_lib:print(Event), $\n,
+                 <<"Raw stacktrace:\n">>, io_lib:print(Stacktrace), $\n
+            ],
+            AttachmentHeader = json:encode(#{
+                type => attachment,
+                filename => <<"failure.txt">>,
+                content_type => <<"text/plain">>,
+                length => iolist_size(Attachment)
+            }),
+            [
+                [ErrHeader, $\n, ErrEvent],
+                $\n, [AttachmentHeader, $\n, Attachment]
+            ]
+    end.
 
 event_defaults(Event) ->
     Defaults = persistent_term:get({golare, defaults}, #{}),

@@ -24,7 +24,15 @@ stop(_State) ->
     ok.
 
 capture_event(Event) ->
-    golare_transport:capture({event, Event}).
+    Scope = #{
+        user => scope_user(erlang:get({golare, user}))
+    },
+    golare_transport:capture({event, maps:merge(Scope, Event)}).
+
+scope_user(undefined) -> null;
+scope_user(#{id := Id}) when is_binary(Id) ->
+    #{ id => Id };
+scope_user(_) -> null.
 
 test_logger(Event) ->
     ?LOG_ERROR(Event).
