@@ -189,7 +189,7 @@ post_capture(#data{conn=Conn, dsn=DSN}, #envelope{event_id = RawEventId, type = 
     Items = encode_items(Type, Event),
     EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN}),
     Body = iolist_to_binary([EnvelopeHeader, $\n, Items]),
-    erlang:display({posting, Body}),
+    %erlang:display({posting, Body}),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
 
@@ -227,9 +227,11 @@ encode_items(ItemType, Event) ->
             ]
     end.
 
-event_defaults(Event) ->
+event_defaults(Event0) ->
     Defaults = persistent_term:get({golare, defaults}, #{}),
-    maps:merge(Defaults, Event).
+    Event = maps:merge(Defaults, Event0),
+    erlang:display(Event),
+    Event.
 
 capture_http_headers() ->
     #{
