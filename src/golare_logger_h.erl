@@ -90,7 +90,7 @@ describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params)->
         logentry =>
             #{formatted => format(FormatString, Params),
               message => unicode:characters_to_binary(FormatString),
-              params => [print(P) || P <- Params]
+              params => [format("~tp", [P]) || P <- Params]
              },
         extra =>
             #{ K => print(V) || K := V <- maps:with([mfa, line], Meta)}
@@ -108,12 +108,14 @@ describe(#{msg := Fallback}) ->
         #{formatted => print(Fallback)}
     }.
 
-describe_report(#{label := Label, format := Format, args := Args}, _Meta) ->
+describe_report(#{label := Label, format := Format, args := Args}, Meta) ->
     #{logentry =>
         #{message => unicode:characters_to_binary(Format),
-          params => [write(A) || A <- Args],
+          params => [format("~tp", [A]) || A <- Args],
           formatted => format(Format, Args)
         },
+        extra =>
+            #{ K => print(V) || K := V <- maps:with([mfa, line], Meta)},
         logger => print(Label)
     };
 describe_report(#{label := Label, report := _}=Report, _Meta) ->

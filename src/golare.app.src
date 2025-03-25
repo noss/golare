@@ -9,9 +9,7 @@
         uuid,
         gun
     ]},
-    {env, [
-        {dsn, "defineme"}
-    ]},
+    {env, []},
     {modules, []},
     {licenses, []},
     {links, []}

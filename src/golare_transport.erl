@@ -15,6 +15,7 @@
 -export([init/1, callback_mode/0, terminate/3, format_status/1]).
 
 %% States
+-export([started/3]).
 -export([connecting/3]).
 -export([available/3]).
 -export([sending/3]).
@@ -60,14 +61,15 @@ capture(Capture) ->
 %%%===================================================================
 
 init([]) ->
-    {ok, DSN} = application:get_env(golare, dsn),
-    #{ host := Host, port := Port} = uri_string:parse(DSN),
-    Opts = #{http_opts => #{keepalive => 20}},
-    {ok, Conn} = gun:open(Host, Port, Opts),
-    Mref = monitor(process, Conn),
-    Q = queue:new(),
     quickrand_cache:init(),
-    {ok, connecting, #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = Q}, []}.
+    DSN = application:get_env(golare, dsn, undefined),
+    Actions = case DSN of
+        undefined ->
+            [];
+        _ ->
+            [{next_event, internal, {connect, DSN}}]
+    end,
+    {ok, started, #data{}, Actions}.
 
 terminate(_Reason, _State, _Data) ->
     ok.
@@ -81,6 +83,19 @@ callback_mode() ->
 %%%===================================================================
 %%% States
 %%%===================================================================
+
+started(internal, {connect, DSN}, _Data) ->
+    #{ host := Host, port := Port} = uri_string:parse(DSN),
+    erlang:display(started),
+    Opts = #{http_opts => #{keepalive => 20}},
+    {ok, Conn} = gun:open(Host, Port, Opts),
+    Mref = monitor(process, Conn),
+    {next_state, connecting, #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = queue:new()}, []};
+started({call, From}, {capture, _Event}, _Data) ->
+    EventId = uuid:get_v4(cached),
+    {keep_state_and_data, [{reply, From, {ok, EventId}}]};
+started(EventType, EventContent, Data) ->
+    handle_event(EventType, EventContent, Data).
 
 connecting(info, {gun_up, Conn, _Protocol}=Up, #data{conn=Conn}=Data) ->
     erlang:display(Up),
