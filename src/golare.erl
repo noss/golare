@@ -50,7 +50,7 @@ set_defaults() ->
     DefaultConfig = maps:merge(DefaultScope, ScopeOverride),
     DefaultFun = fun
         (Key, Fun) when is_atom(Key), is_function(Fun, 0) ->
-            Fun();
+            apply(Fun, []);
         (Key, Value) when is_atom(Key) ->
             Value
     end,

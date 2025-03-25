@@ -38,14 +38,14 @@ log(#{level := Level}=LogEvent, _Config) ->
             Crash = #{
                 logger => ?MODULE,
                 logentry => #{
-                    formatted => iolist_to_binary(io_lib:print({Type, Rsn, Trace})),
+                    formatted => print({Type, Rsn, Trace}),
                     message => <<"Crash in golare_logger_h">>
                 },
                 exception => #{
                     values => [
                             #{
                                 type => <<"sdk crash">>,
-                                value => iolist_to_binary(io_lib:print({Type, Rsn, Trace})),
+                                value => print({Type, Rsn, Trace}),
                                 stacktrace => case [frame(T) || T <- Trace] of
                                         [] -> null;
                                         Frames -> #{frames => lists:reverse(Frames)}
@@ -75,7 +75,7 @@ event_timestamp(#{meta := #{time := MicrosecondEpoch}}) ->
     iolist_to_binary(Rfc3339).
 
 logger_name(#{meta := #{mfa := {M, F, A}}}) ->
-    iolist_to_binary(io_lib:format("~s:~s/~b", [M, F, A]));
+    format("~s:~s/~b", [M, F, A]);
 logger_name(_) ->
     null.
 
@@ -83,53 +83,52 @@ describe(#{msg := {report, Report}, meta := Meta}) ->
     describe_report(Report, Meta);
 describe(#{msg := {string, Raw}, meta := _Meta}) ->
     #{logentry =>
-        #{formatted => iolist_to_unicode_binary(Raw) }
+        #{formatted => unicode:characters_to_binary(Raw) }
     };
 describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params)->
     #{
         logentry =>
-            #{formatted => iolist_to_unicode_binary(io_lib:format(FormatString, Params)),
-              message => iolist_to_unicode_binary(FormatString),
-              params => [iolist_to_unicode_binary(io_lib:print(P)) || P <- Params]
+            #{formatted => format(FormatString, Params),
+              message => unicode:characters_to_binary(FormatString),
+              params => [print(P) || P <- Params]
              },
         extra =>
-            #{ K => iolist_to_unicode_binary(io_lib:print(V))
-                || K := V <- maps:with([mfa, line], Meta)}
+            #{ K => print(V) || K := V <- maps:with([mfa, line], Meta)}
     };
 describe(#{msg := Fallback, meta := #{mfa := MFA, line := Line}}) ->
     #{
         logentry => #{
-            formatted => iolist_to_unicode_binary(io_lib:print(Fallback))
+            formatted => print(Fallback)
             },
         fingerprint =>
-            [iolist_to_unicode_binary(io_lib:print(I)) || I <- [MFA, Line]]
+            [print(I) || I <- [MFA, Line]]
     };
 describe(#{msg := Fallback}) ->
     #{logentry =>
-        #{formatted => iolist_to_unicode_binary(io_lib:print(Fallback))}
+        #{formatted => print(Fallback)}
     }.
 
 describe_report(#{label := Label, format := Format, args := Args}, _Meta) ->
     #{logentry =>
-        #{message => iolist_to_unicode_binary(Format),
-          params => [iolist_to_unicode_binary(io_lib:write(A)) || A <- Args],
-          formatted => iolist_to_unicode_binary(io_lib:format(Format, Args))
+        #{message => unicode:characters_to_binary(Format),
+          params => [write(A) || A <- Args],
+          formatted => format(Format, Args)
         },
-        logger => iolist_to_unicode_binary(io_lib:print(Label))
+        logger => print(Label)
     };
 describe_report(#{label := Label, report := _}=Report, _Meta) ->
     #{logentry =>
-        #{message => iolist_to_unicode_binary(io_lib:print(Label)),
-          formatted => iolist_to_unicode_binary(io_lib:print(Report))
+        #{message => print(Label),
+          formatted => print(Report)
         },
-        logger => iolist_to_unicode_binary(io_lib:print(Label)),
+        logger => print(Label),
         exception => describe_error_info(Report),
         extra => extras_report(Report),
         fingerprint => fingerprint_report(Report)
     };
 describe_report(Report, _Meta) ->
     #{logentry => 
-        #{formatted => iolist_to_unicode_binary(io_lib:write(Report))}
+        #{formatted => write(Report)}
      }.
 
 describe_error_info(#{report := [[{_, _}|_]=KVs|_]}) ->
@@ -138,13 +137,12 @@ describe_error_info(#{report := [[{_, _}|_]=KVs|_]}) ->
             #{
                 values => [
                     #{
-                        type => iolist_to_unicode_binary(io_lib:print(Type)),
-                        value => iolist_to_unicode_binary(io_lib:print(Rsn)),
+                        type => print(Type),
+                        value => print(Rsn),
                         stacktrace => case [frame(T) || T <- Trace] of
                                 [] -> null;
                                 Frames -> #{frames => lists:reverse(Frames)}
                             end
-            
                     }
                 ]
             };
@@ -156,21 +154,21 @@ describe_error_info(_) ->
 
 frame({M, F, A, Opts}) ->
     ArgNum = if is_integer(A) -> A; is_list(A) -> length(A) end,
-    MFA = io_lib:format("~p:~p/~b", [M, F, ArgNum]),
+    MFA = format("~p:~p/~b", [M, F, ArgNum]),
     Filename = case proplists:get_value(file, Opts) of
         undefined -> null;
-        String -> iolist_to_unicode_binary(String)
+        String -> unicode:characters_to_binary(String)
     end,
     #{
-        function => iolist_to_binary(MFA),
+        function => MFA,
         lineno => proplists:get_value(line, Opts, null),
         filename => Filename
     }.
 
 extras_report(#{label := _Label, report := [[{_,_}|_]=KV| _]}) ->
     #{
-        process_label => iolist_to_unicode_binary(io_lib:print(proplists:get_value(process_label, KV))),
-        registered_name => iolist_to_unicode_binary(io_lib:print(proplists:get_value(registered_name, KV)))
+        process_label => print(proplists:get_value(process_label, KV)),
+        registered_name => print(proplists:get_value(registered_name, KV))
     };
 extras_report(_) ->
     null.
@@ -184,9 +182,18 @@ fingerprint_report(#{label := Label, report := [[{_,_}|_]=KV| _]}) ->
         end,
         proplists:get_value(process_label, KV)
     ],
-    [iolist_to_unicode_binary(io_lib:write(I)) || I <- Fingerprints];
+    [write(I) || I <- Fingerprints];
 fingerprint_report(_) ->
     null.
 
-iolist_to_unicode_binary(In) ->
-    unicode:characters_to_binary(iolist_to_binary(In), latin1, utf8).
+format(Format, Args) ->
+    Msg = io_lib:format(Format, Args),
+    unicode:characters_to_binary(Msg).
+
+print(Term) ->
+    Printed = io_lib:print(Term),
+    unicode:characters_to_binary(Printed).
+
+write(Term) ->
+    Written = io_lib:write(Term),
+    unicode:characters_to_binary(Written).
