@@ -93,7 +93,7 @@ describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params)->
               params => [format("~tp", [P]) || P <- Params]
              },
         extra =>
-            #{ K => print(V) || K := V <- maps:with([mfa, line], Meta)}
+            #{ K => print(V) || K := V <- maps:without([time], Meta)}
     };
 describe(#{msg := Fallback, meta := #{mfa := MFA, line := Line}}) ->
     #{
@@ -115,17 +115,18 @@ describe_report(#{label := Label, format := Format, args := Args}, Meta) ->
           formatted => format(Format, Args)
         },
         extra =>
-            #{ K => print(V) || K := V <- maps:with([mfa, line], Meta)},
+            #{ K => print(V) || K := V <- maps:without([time], Meta)},
         logger => print(Label)
     };
-describe_report(#{label := Label, report := _}=Report, _Meta) ->
+describe_report(#{label := Label, report := _}=Report, Meta) ->
     #{logentry =>
         #{message => print(Label),
           formatted => print(Report)
         },
         logger => print(Label),
         exception => describe_error_info(Report),
-        extra => extras_report(Report),
+        extra =>
+            #{ K => print(V) || K := V <- maps:without([time, report_cb], Meta)},
         fingerprint => fingerprint_report(Report)
     };
 describe_report(Report, _Meta) ->
@@ -166,14 +167,6 @@ frame({M, F, A, Opts}) ->
         lineno => proplists:get_value(line, Opts, null),
         filename => Filename
     }.
-
-extras_report(#{label := _Label, report := [[{_,_}|_]=KV| _]}) ->
-    #{
-        process_label => print(proplists:get_value(process_label, KV)),
-        registered_name => print(proplists:get_value(registered_name, KV))
-    };
-extras_report(_) ->
-    null.
 
 fingerprint_report(#{label := Label, report := [[{_,_}|_]=KV| _]}) ->
     Fingerprints = [
