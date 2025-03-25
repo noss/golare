@@ -95,13 +95,13 @@ describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params)->
         extra =>
             #{ K => print(V) || K := V <- maps:without([time], Meta)}
     };
-describe(#{msg := Fallback, meta := #{mfa := MFA, line := Line}}) ->
+describe(#{msg := Fallback, meta := #{mfa := _MFA, line := _Line}}) ->
     #{
         logentry => #{
             formatted => print(Fallback)
-            },
-        fingerprint =>
-            [print(I) || I <- [MFA, Line]]
+            }
+        %%fingerprint =>
+        %%    [print(I) || I <- [MFA, Line]]
     };
 describe(#{msg := Fallback}) ->
     #{logentry =>
@@ -126,8 +126,8 @@ describe_report(#{label := Label, report := _}=Report, Meta) ->
         logger => print(Label),
         exception => describe_error_info(Report),
         extra =>
-            #{ K => print(V) || K := V <- maps:without([time, report_cb], Meta)},
-        fingerprint => fingerprint_report(Report)
+            #{ K => print(V) || K := V <- maps:without([time, report_cb], Meta)}
+        %%fingerprint => fingerprint_report(Report)
     };
 describe_report(Report, _Meta) ->
     #{logentry => 
@@ -168,18 +168,18 @@ frame({M, F, A, Opts}) ->
         filename => Filename
     }.
 
-fingerprint_report(#{label := Label, report := [[{_,_}|_]=KV| _]}) ->
-    Fingerprints = [
-        Label,
-        case proplists:get_value(initial_call, KV) of
-            {M, F, Args} when is_list(Args) -> {M, F, length(Args)};
-            Other -> Other
-        end,
-        proplists:get_value(process_label, KV)
-    ],
-    [write(I) || I <- Fingerprints];
-fingerprint_report(_) ->
-    null.
+%%fingerprint_report(#{label := Label, report := [[{_,_}|_]=KV| _]}) ->
+%%    Fingerprints = [
+%%        Label,
+%%        case proplists:get_value(initial_call, KV) of
+%%            {M, F, Args} when is_list(Args) -> {M, F, length(Args)};
+%%            Other -> Other
+%%        end,
+%%        proplists:get_value(process_label, KV)
+%%    ],
+%%    [write(I) || I <- Fingerprints];
+%%fingerprint_report(_) ->
+%%    null.
 
 format(Format, Args) ->
     Msg = io_lib:format(Format, Args),

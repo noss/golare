@@ -24,19 +24,19 @@
 -define(SERVER, ?MODULE).
 
 -record(envelope, {
-        event_id :: binary(),
-        type = event,
-        payload
-    }).
+    event_id :: binary(),
+    type = event,
+    payload
+}).
 -record(data, {
-        max_queued = 100 :: pos_integer(),
-        max_pipeline = 4 :: pos_integer(),
-        dsn :: binary(),
-        conn :: pid() | undefined,
-        conn_mref,
-        q :: queue:queue(),
-        posted = [] :: list(gun:stream_ref())
-    }).
+    max_queued = 100 :: pos_integer(),
+    max_pipeline = 4 :: pos_integer(),
+    dsn :: binary(),
+    conn :: pid() | undefined,
+    conn_mref,
+    q :: queue:queue(),
+    posted = [] :: list(gun:stream_ref())
+}).
 
 name() -> ?MODULE.
 
@@ -63,12 +63,13 @@ capture(Capture) ->
 init([]) ->
     quickrand_cache:init(),
     DSN = application:get_env(golare, dsn, undefined),
-    Actions = case DSN of
-        undefined ->
-            [];
-        _ ->
-            [{next_event, internal, {connect, DSN}}]
-    end,
+    Actions =
+        case DSN of
+            undefined ->
+                [];
+            _ ->
+                [{next_event, internal, {connect, DSN}}]
+        end,
     {ok, started, #data{}, Actions}.
 
 terminate(_Reason, _State, _Data) ->
@@ -85,65 +86,74 @@ callback_mode() ->
 %%%===================================================================
 
 started(internal, {connect, DSN}, _Data) ->
-    #{ host := Host, port := Port} = uri_string:parse(DSN),
+    #{host := Host, port := Port} = uri_string:parse(DSN),
     erlang:display(started),
     Opts = #{http_opts => #{keepalive => 20}},
     {ok, Conn} = gun:open(Host, Port, Opts),
     Mref = monitor(process, Conn),
-    {next_state, connecting, #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = queue:new()}, []};
+    {next_state, connecting,
+        #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = queue:new()}, []};
 started({call, From}, {capture, _Event}, _Data) ->
     EventId = uuid:get_v4(cached),
     {keep_state_and_data, [{reply, From, {ok, EventId}}]};
 started(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
-connecting(info, {gun_up, Conn, _Protocol}=Up, #data{conn=Conn}=Data) ->
+connecting(info, {gun_up, Conn, _Protocol} = Up, #data{conn = Conn} = Data) ->
     erlang:display(Up),
     {next_state, available, Data};
 connecting(EventType, EventContent, Data) ->
-    handle_event(EventType, EventContent, Data). 
+    handle_event(EventType, EventContent, Data).
 
 available({call, From}, {capture, Event}, Data) ->
     {NextData, EventId} = enqueue(Data, Event),
-    {next_state, sending, NextData,
-        [{reply, From, {ok, EventId}},
-         {next_event, internal, send}
-         ]};
+    {next_state, sending, NextData, [
+        {reply, From, {ok, EventId}},
+        {next_event, internal, send}
+    ]};
 available(EventType, EventContent, Data) ->
-    handle_event(EventType, EventContent, Data). 
+    handle_event(EventType, EventContent, Data).
 
 sending(internal, send, Data) ->
     {ok, StreamRef} = post_capture(Data, queue:last(Data#data.q)),
     Posted = [StreamRef | Data#data.posted],
     Q1 = queue:init(Data#data.q),
-    Actions = case queue:is_empty(Q1) of
-        false when length(Posted) < Data#data.max_pipeline ->
-            [{next_event, internal, send}];
-        _ ->
-            []
-    end,
+    Actions =
+        case queue:is_empty(Q1) of
+            false when length(Posted) < Data#data.max_pipeline ->
+                [{next_event, internal, send}];
+            _ ->
+                []
+        end,
     NextData = Data#data{q = Q1, posted = Posted},
     {keep_state, NextData, Actions};
-sending(info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}=Resp, #data{conn = Conn} = Data) ->
+sending(
+    info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers} = Resp, #data{conn = Conn} = Data
+) ->
     case Status of
         200 ->
             erlang:display(Resp),
             keep_state_and_data;
         429 ->
             erlang:display({retry_after, Resp}),
-            RetryAfter= proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
+            RetryAfter = proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
             Seconds = binary_to_integer(RetryAfter),
             NextEvent = {next_event, internal, {retry_after, Seconds}},
-            lists:foreach(fun (Ref) ->
-                ok = gun:cancel(Conn, Ref)
-            end, lists:delete(StreamRef, Data#data.posted)),
+            lists:foreach(
+                fun(Ref) ->
+                    ok = gun:cancel(Conn, Ref)
+                end,
+                lists:delete(StreamRef, Data#data.posted)
+            ),
             NextData = Data#data{posted = []},
             {next_state, rate_limited, NextData, [NextEvent]}
     end;
-sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk}=Resp, #data{conn = Conn}) ->
+sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk} = Resp, #data{conn = Conn}) ->
     erlang:display(Resp),
     keep_state_and_data;
-sending(info, {gun_data, Conn, StreamRef, fin, _BodyChunk}=Resp, #data{conn = Conn, q = Q} = Data) ->
+sending(
+    info, {gun_data, Conn, StreamRef, fin, _BodyChunk} = Resp, #data{conn = Conn, q = Q} = Data
+) ->
     erlang:display(Resp),
     Posted = lists:delete(StreamRef, Data#data.posted),
     NextData = Data#data{posted = Posted},
@@ -158,10 +168,10 @@ sending(info, {gun_data, Conn, StreamRef, fin, _BodyChunk}=Resp, #data{conn = Co
             {keep_state, NextData}
     end;
 sending(EventType, EventContent, Data) ->
-    handle_event(EventType, EventContent, Data). 
+    handle_event(EventType, EventContent, Data).
 
 rate_limited(internal, {retry_after, Seconds}, _Data) ->
-    RetryTimeoutAction = {state_timeout, Seconds*1000, retry},
+    RetryTimeoutAction = {state_timeout, Seconds * 1000, retry},
     {keep_state_and_data, [RetryTimeoutAction]};
 rate_limited(state_timeout, retry, Data) ->
     case queue:is_empty(Data#data.q) of
@@ -171,10 +181,10 @@ rate_limited(state_timeout, retry, Data) ->
             SendAction = {next_event, internal, send},
             {next_state, sending, Data, [SendAction]}
     end;
-rate_limited(info, {gun_response, _Conn, _StreamRef, _IsFin, _Status, _Headers}=Resp, _Data) ->
+rate_limited(info, {gun_response, _Conn, _StreamRef, _IsFin, _Status, _Headers} = Resp, _Data) ->
     erlang:display({rate_limit, Resp}),
     keep_state_and_data;
-rate_limited(info, {gun_data, _Conn, _StreamRef, fin, _BodyChunk}=Resp, _Data) ->
+rate_limited(info, {gun_data, _Conn, _StreamRef, fin, _BodyChunk} = Resp, _Data) ->
     erlang:display({rate_limit, Resp}),
     keep_state_and_data;
 rate_limited(EventType, EventContent, Data) ->
@@ -186,18 +196,19 @@ rate_limited(EventType, EventContent, Data) ->
 
 handle_event({call, From}, {capture, Event}, Data) ->
     {NextData, EventId} = enqueue(Data, Event),
-    {keep_state, NextData,
-        [{reply, From, {ok, EventId}}]};
-handle_event(info, {'DOWN', Mref, process, Conn, Reason}, #data{conn_mref = Mref, conn=Conn}) ->
+    {keep_state, NextData, [{reply, From, {ok, EventId}}]};
+handle_event(info, {'DOWN', Mref, process, Conn, Reason}, #data{conn_mref = Mref, conn = Conn}) ->
     exit(Reason);
-handle_event(info, {gun_down, Conn, _Protocol, _Reason, _Killed}=Down, #data{conn=Conn} = Data) ->
+handle_event(info, {gun_down, Conn, _Protocol, _Reason, _Killed} = Down, #data{conn = Conn} = Data) ->
     erlang:display(Down),
     {next_state, connecting, Data#data{posted = []}};
 handle_event(EventType, EventContent, _Data) ->
     erlang:display({EventType, EventContent}),
     keep_state_and_data.
 
-post_capture(#data{conn=Conn, dsn=DSN}, #envelope{event_id = RawEventId, type = Type, payload=Event}) ->
+post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
+    event_id = RawEventId, type = Type, payload = Event
+}) ->
     #{path := "/" ++ ProjectId} = uri_string:parse(binary_to_list(DSN)),
     StreamRef = gun:post(Conn, ["/api/", ProjectId, "/envelope/"], capture_http_headers()),
     EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
@@ -226,10 +237,17 @@ encode_items(ItemType, Event) ->
             ErrEvent = json:encode(event_defaults(#{errors => [Errors], logentry => LogEntry})),
             ErrHeader = json:encode(#{type => event, length => iolist_size(ErrEvent)}),
             Attachment =
-                [io_lib:print(Reason), $\n, $\n,
-                 <<"Raw event:\n">>, io_lib:print(Event), $\n,
-                 <<"Raw stacktrace:\n">>, io_lib:print(Stacktrace), $\n
-            ],
+                [
+                    io_lib:print(Reason),
+                    $\n,
+                    $\n,
+                    <<"Raw event:\n">>,
+                    io_lib:print(Event),
+                    $\n,
+                    <<"Raw stacktrace:\n">>,
+                    io_lib:print(Stacktrace),
+                    $\n
+                ],
             AttachmentHeader = json:encode(#{
                 type => attachment,
                 filename => <<"failure.txt">>,
@@ -238,12 +256,13 @@ encode_items(ItemType, Event) ->
             }),
             [
                 [ErrHeader, $\n, ErrEvent],
-                $\n, [AttachmentHeader, $\n, Attachment]
+                $\n,
+                [AttachmentHeader, $\n, Attachment]
             ]
     end.
 
 event_defaults(Event0) ->
-    Defaults = persistent_term:get({golare, defaults}, #{}),
+    Defaults = persistent_term:get({golare, global_scope}, #{}),
     Event = maps:merge(Defaults, Event0),
     erlang:display(Event),
     Event.
@@ -267,4 +286,3 @@ overflow(Q, MaxLen) ->
         _ ->
             Q
     end.
-
