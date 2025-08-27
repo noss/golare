@@ -7,3 +7,17 @@ Build
 -----
 
     $ rebar3 compile
+
+Transport states
+-----
+
+```mermaid
+flowchart LR
+    started --> connecting
+    connecting --> available
+    available --> sending
+    sending --> available
+    sending --> rate-limited
+    rate-limited --> available
+```
+
