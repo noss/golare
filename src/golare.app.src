@@ -6,6 +6,8 @@
     {applications, [
         kernel,
         stdlib,
+        certifi,
+        quickrand,
         uuid,
         gun
     ]},
