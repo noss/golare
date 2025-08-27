@@ -8,12 +8,18 @@ Build
 
     $ rebar3 compile
 
+OTP Logger
+-----
+
+Golare will register itself as an OTP logger handler. The handler will re-shape the logged event to be a sentry event, and send it to the
+transport `gen_statem`.
+
 Transport states
 -----
 
 Initial state is `started` and it will send itself an internal event to connect to the configured DSN, so it transitions to `connecting`. 
 
-The `connecting` state waits for the sentry link to be up, which transitions it to `available`.
+The `connecting` state waits for the sentry link to be up, at which point it transitions to `available`.
 
 If the transport is `available` we will transition to `sending` if an event capture happens.
 
