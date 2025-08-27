@@ -19,5 +19,6 @@ flowchart LR
     sending --> available
     sending --> rate-limited
     rate-limited --> available
+    rate-limited --> sending
 ```
 
