@@ -31,10 +31,10 @@
 -record(data, {
     max_queued = 100 :: pos_integer(),
     max_pipeline = 4 :: pos_integer(),
-    dsn :: binary(),
+    dsn :: binary() | undefined,
     conn :: pid() | undefined,
     conn_mref,
-    q :: queue:queue(),
+    q :: queue:queue() | undefined,
     posted = [] :: list(gun:stream_ref())
 }).
 
@@ -86,7 +86,12 @@ callback_mode() ->
 %%%===================================================================
 
 started(internal, {connect, DSN}, _Data) ->
-    #{host := Host, port := Port} = uri_string:parse(DSN),
+    ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
+    Port = case maps:get(port, ParsedDSN, undefined) of
+        undefined when Scheme == "http" -> 80;
+        undefined when Scheme == "https" -> 443;
+        P -> P
+    end,
     erlang:display(started),
     Opts = #{http_opts => #{keepalive => 20}},
     {ok, Conn} = gun:open(Host, Port, Opts),
