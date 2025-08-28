@@ -24,7 +24,7 @@ global_platform() ->
     other.
 
 global_environment() ->
-    production.
+    golare_config:environment().
 
 global_release() ->
     %% These are set by rebar3 releases

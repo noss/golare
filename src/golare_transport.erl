@@ -31,7 +31,7 @@
 -record(data, {
     max_queued = 100 :: pos_integer(),
     max_pipeline = 4 :: pos_integer(),
-    dsn :: binary() | undefined,
+    dsn :: binary(),
     conn :: pid() | undefined,
     conn_mref,
     q :: queue:queue() | undefined,
@@ -62,15 +62,14 @@ capture(Capture) ->
 
 init([]) ->
     quickrand_cache:init(),
-    DSN = application:get_env(golare, dsn, undefined),
-    Actions =
-        case DSN of
-            undefined ->
-                [];
-            _ ->
-                [{next_event, internal, {connect, DSN}}]
-        end,
-    {ok, started, #data{}, Actions}.
+    State = #data{dsn = golare_config:dsn()},
+    case State#data.dsn of
+        <<>> ->
+            Actions = [];
+        _ ->
+            Actions = [{next_event, internal, connect}]
+    end,
+    {ok, started, State, Actions}.
 
 terminate(_Reason, _State, _Data) ->
     ok.
@@ -85,19 +84,18 @@ callback_mode() ->
 %%% States
 %%%===================================================================
 
-started(internal, {connect, DSN}, _Data) ->
+started(internal, connect, #data{dsn = DSN}=State) ->
     ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
     Port = case maps:get(port, ParsedDSN, undefined) of
-        undefined when Scheme == "http" -> 80;
-        undefined when Scheme == "https" -> 443;
+        undefined when Scheme == <<"http">> -> 80;
+        undefined when Scheme == <<"https">> -> 443;
         P -> P
     end,
-    erlang:display(started),
     Opts = #{http_opts => #{keepalive => 20}},
-    {ok, Conn} = gun:open(Host, Port, Opts),
+    {ok, Conn} = gun:open(binary_to_list(Host), Port, Opts),
     Mref = monitor(process, Conn),
     {next_state, connecting,
-        #data{conn = Conn, conn_mref = Mref, dsn = list_to_binary(DSN), q = queue:new()}, []};
+        State#data{conn = Conn, conn_mref = Mref, q = queue:new()}, []};
 started({call, From}, {capture, _Event}, _Data) ->
     EventId = uuid:get_v4(cached),
     {keep_state_and_data, [{reply, From, {ok, EventId}}]};
