@@ -102,8 +102,7 @@ started({call, From}, {capture, _Event}, _Data) ->
 started(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
-connecting(info, {gun_up, Conn, _Protocol} = Up, #data{conn = Conn} = Data) ->
-    erlang:display(Up),
+connecting(info, {gun_up, Conn, _Protocol}, #data{conn = Conn} = Data) ->
     {next_state, available, Data};
 connecting(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
@@ -131,14 +130,12 @@ sending(internal, send, Data) ->
     NextData = Data#data{q = Q1, posted = Posted},
     {keep_state, NextData, Actions};
 sending(
-    info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers} = Resp, #data{conn = Conn} = Data
+    info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}, #data{conn = Conn} = Data
 ) ->
     case Status of
         200 ->
-            erlang:display(Resp),
             keep_state_and_data;
         429 ->
-            erlang:display({retry_after, Resp}),
             RetryAfter = proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
             Seconds = binary_to_integer(RetryAfter),
             NextEvent = {next_event, internal, {retry_after, Seconds}},
@@ -151,13 +148,11 @@ sending(
             NextData = Data#data{posted = []},
             {next_state, rate_limited, NextData, [NextEvent]}
     end;
-sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk} = Resp, #data{conn = Conn}) ->
-    erlang:display(Resp),
+sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk}, #data{conn = Conn}) ->
     keep_state_and_data;
 sending(
-    info, {gun_data, Conn, StreamRef, fin, _BodyChunk} = Resp, #data{conn = Conn, q = Q} = Data
+    info, {gun_data, Conn, StreamRef, fin, _BodyChunk}, #data{conn = Conn, q = Q} = Data
 ) ->
-    erlang:display(Resp),
     Posted = lists:delete(StreamRef, Data#data.posted),
     NextData = Data#data{posted = Posted},
     case queue:is_empty(Q) of
@@ -184,11 +179,9 @@ rate_limited(state_timeout, retry, Data) ->
             SendAction = {next_event, internal, send},
             {next_state, sending, Data, [SendAction]}
     end;
-rate_limited(info, {gun_response, _Conn, _StreamRef, _IsFin, _Status, _Headers} = Resp, _Data) ->
-    erlang:display({rate_limit, Resp}),
+rate_limited(info, {gun_response, _Conn, _StreamRef, _IsFin, _Status, _Headers}, _Data) ->
     keep_state_and_data;
-rate_limited(info, {gun_data, _Conn, _StreamRef, fin, _BodyChunk} = Resp, _Data) ->
-    erlang:display({rate_limit, Resp}),
+rate_limited(info, {gun_data, _Conn, _StreamRef, fin, _BodyChunk}, _Data) ->
     keep_state_and_data;
 rate_limited(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
@@ -202,11 +195,9 @@ handle_event({call, From}, {capture, Event}, Data) ->
     {keep_state, NextData, [{reply, From, {ok, EventId}}]};
 handle_event(info, {'DOWN', Mref, process, Conn, Reason}, #data{conn_mref = Mref, conn = Conn}) ->
     exit(Reason);
-handle_event(info, {gun_down, Conn, _Protocol, _Reason, _Killed} = Down, #data{conn = Conn} = Data) ->
-    erlang:display(Down),
+handle_event(info, {gun_down, Conn, _Protocol, _Reason, _Killed}, #data{conn = Conn} = Data) ->
     {next_state, connecting, Data#data{posted = []}};
-handle_event(EventType, EventContent, _Data) ->
-    erlang:display({EventType, EventContent}),
+handle_event(_EventType, _EventContent, _Data) ->
     keep_state_and_data.
 
 post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
@@ -218,7 +209,6 @@ post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
     Items = encode_items(Type, Event),
     EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN}),
     Body = iolist_to_binary([EnvelopeHeader, $\n, Items]),
-    %erlang:display({posting, Body}),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
 
@@ -266,9 +256,7 @@ encode_items(ItemType, Event) ->
 
 event_defaults(Event0) ->
     Defaults = persistent_term:get({golare, global_scope}, #{}),
-    Event = maps:merge(Defaults, Event0),
-    erlang:display(Event),
-    Event.
+    maps:merge(Defaults, Event0).
 
 capture_http_headers() ->
     #{
@@ -284,7 +272,6 @@ enqueue(Data, {event, Event}) ->
 overflow(Q, MaxLen) ->
     case queue:len(Q) > MaxLen of
         true ->
-            erlang:display(overflow),
             overflow(queue:init(Q), MaxLen);
         _ ->
             Q
