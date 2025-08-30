@@ -207,7 +207,8 @@ post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
     StreamRef = gun:post(Conn, ["/api/", ProjectId, "/envelope/"], capture_http_headers()),
     EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
     Items = encode_items(Type, Event),
-    EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN}),
+    SentAt = calendar:system_time_to_rfc3339(erlang:system_time(), [{unit, native}]),
+    EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN, sent_at => list_to_binary(SentAt)}),
     Body = iolist_to_binary([EnvelopeHeader, $\n, Items]),
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
