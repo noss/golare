@@ -86,13 +86,24 @@ callback_mode() ->
 
 started(internal, connect, #data{dsn = DSN} = State) ->
     ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
+    Opts = #{
+        transport =>
+            case Scheme of
+                <<"http">> -> tcp;
+                <<"https">> -> tls
+            end,
+        tls_opts => [
+            {verify, verify_peer},
+            {depth, 99},
+            {cacerts, certifi:cacerts()}
+        ]
+    },
     Port =
         case maps:get(port, ParsedDSN, undefined) of
             undefined when Scheme == <<"http">> -> 80;
             undefined when Scheme == <<"https">> -> 443;
             P -> P
         end,
-    Opts = #{http_opts => #{keepalive => 20}},
     {ok, Conn} = gun:open(binary_to_list(Host), Port, Opts),
     Mref = monitor(process, Conn),
     {next_state, connecting, State#data{conn = Conn, conn_mref = Mref, q = queue:new()}, []};

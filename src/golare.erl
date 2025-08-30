@@ -72,9 +72,10 @@ set_context() ->
     persistent_term:put({golare, contexts}, Context).
 
 add_logger() ->
+    Level = golare_config:logger_level(),
     Config = #{
         config => #{},
-        level => warning,
+        level => Level,
         filter_default => log,
         filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
     },

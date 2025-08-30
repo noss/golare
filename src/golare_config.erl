@@ -2,6 +2,7 @@
 
 -export([dsn/0]).
 -export([environment/0]).
+-export([logger_level/0]).
 
 -spec dsn() -> binary().
 dsn() ->
@@ -10,6 +11,10 @@ dsn() ->
 -spec environment() -> atom().
 environment() ->
     lookup("SENTRY_ENVIRONMENT", environment, production).
+
+-spec logger_level() -> atom().
+logger_level() ->
+    lookup("SENTRY_LOGGER_LEVEL", logger_level, notice).
 
 %% Internal
 
@@ -20,7 +25,11 @@ lookup(EnvName, ConfigName, Default) ->
         {Env, _} -> type_match(Env, Default)
     end.
 
+type_match(Value, Default) when is_atom(Value), is_atom(Default) ->
+    Value;
 type_match(Value, Default) when is_atom(Default) ->
     list_to_atom(Value);
+type_match(Value, Default) when is_binary(Value), is_binary(Default) ->
+    Value;
 type_match(Value, Default) when is_binary(Default) ->
     list_to_binary(Value).
