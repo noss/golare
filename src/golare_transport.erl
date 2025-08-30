@@ -203,8 +203,8 @@ handle_event(_EventType, _EventContent, _Data) ->
 post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
     event_id = RawEventId, type = Type, payload = Event
 }) ->
-    #{path := "/" ++ ProjectId} = uri_string:parse(binary_to_list(DSN)),
-    StreamRef = gun:post(Conn, ["/api/", ProjectId, "/envelope/"], capture_http_headers()),
+    #{path := ProjectId} = uri_string:parse(DSN),
+    StreamRef = gun:post(Conn, ["/api", ProjectId, "/envelope/"], capture_http_headers()),
     EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
     Items = encode_items(Type, Event),
     SentAt = calendar:system_time_to_rfc3339(erlang:system_time(), [{unit, native}]),
