@@ -203,15 +203,22 @@ handle_event(_EventType, _EventContent, _Data) ->
 post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
     event_id = RawEventId, type = Type, payload = Event
 }) ->
-    #{path := ProjectId} = uri_string:parse(DSN),
-    StreamRef = gun:post(Conn, ["/api", ProjectId, "/envelope/"], capture_http_headers()),
-    EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
-    Items = encode_items(Type, Event),
-    SentAt = calendar:system_time_to_rfc3339(erlang:system_time(), [{unit, native}]),
-    EnvelopeHeader = json:encode(#{event_id => EventId, dsn => DSN, sent_at => list_to_binary(SentAt)}),
-    Body = iolist_to_binary([EnvelopeHeader, $\n, Items]),
+    StreamRef = gun:post(Conn,
+        ["/api", dsn_project_id(DSN), "/envelope/"],
+        #{ <<"content-type">> => <<"application/x-sentry-envelope">> }
+        ),
+    Body = [envelope_header(RawEventId, DSN), $\n, encode_items(Type, Event)],
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.
+
+dsn_project_id(DSN) ->
+    #{path := ProjectId} = uri_string:parse(DSN),
+    ProjectId.
+
+envelope_header(RawEventId, DSN) ->
+    EventId = list_to_binary(uuid:uuid_to_string(RawEventId, nodash)),
+    SentAt = calendar:system_time_to_rfc3339(erlang:system_time(), [{unit, native}]),
+    json:encode(#{event_id => EventId, dsn => DSN, sent_at => list_to_binary(SentAt)}).
 
 encode_items(ItemType, Event) ->
     try
@@ -258,11 +265,6 @@ encode_items(ItemType, Event) ->
 event_defaults(Event0) ->
     Defaults = persistent_term:get({golare, global_scope}, #{}),
     maps:merge(Defaults, Event0).
-
-capture_http_headers() ->
-    #{
-        <<"content-type">> => <<"application/x-sentry-envelope">>
-    }.
 
 enqueue(Data, {event, Event}) ->
     EventId = uuid:get_v4(cached),
