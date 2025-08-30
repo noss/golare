@@ -33,7 +33,7 @@
     max_pipeline = 4 :: pos_integer(),
     dsn :: binary(),
     conn :: pid() | undefined,
-    conn_mref,
+    conn_mref :: reference() | undefined,
     q :: queue:queue(),
     posted :: list(gun:stream_ref())
 }).
@@ -135,9 +135,10 @@ sending(internal, send, Data) ->
     {ok, StreamRef} = post_capture(Data, queue:last(Data#data.q)),
     Posted = [StreamRef | Data#data.posted],
     Q1 = queue:init(Data#data.q),
+    MaxPipeline = length(Posted) < Data#data.max_pipeline,
     Actions =
         case queue:is_empty(Q1) of
-            false when length(Posted) < Data#data.max_pipeline ->
+            false when not MaxPipeline ->
                 [{next_event, internal, send}];
             _ ->
                 []
@@ -151,22 +152,13 @@ sending(
         200 ->
             keep_state_and_data;
         429 ->
-            RetryAfter = proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
-            Seconds = case cow_http_hd:parse_retry_after(RetryAfter) of
-                S when is_integer(S) -> S;
-                {{_Y, _M, _D}, {_H, _MM, _S}} ->
-                    %% TODO: support date in future
-                    60
-            end,
-            NextEvent = {next_event, internal, {retry_after, Seconds}},
-            lists:foreach(
-                fun(Ref) ->
-                    ok = gun:cancel(Conn, Ref)
-                end,
-                lists:delete(StreamRef, Data#data.posted)
-            ),
+            Posted = lists:delete(StreamRef, Data#data.posted),
+            %% Cancel other outstanding requests, then forget them
+            [gun:cancel(Conn, Ref) || Ref <- Posted],
             NextData = Data#data{posted = []},
-            {next_state, rate_limited, NextData, [NextEvent]}
+            RetryAfter = proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
+            Action = {next_event, internal, {retry_after, RetryAfter}},
+            {next_state, rate_limited, NextData, [Action]}
     end;
 sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk}, #data{conn = Conn}) ->
     keep_state_and_data;
@@ -175,12 +167,13 @@ sending(
 ) ->
     Posted = lists:delete(StreamRef, Data#data.posted),
     NextData = Data#data{posted = Posted},
+    MaxPipeline = length(Posted) < Data#data.max_pipeline,
     case queue:is_empty(Q) of
         true when Posted /= [] ->
             {keep_state, NextData};
         true ->
             {next_state, available, NextData};
-        false when length(Posted) < Data#data.max_pipeline ->
+        false when not MaxPipeline ->
             {keep_state, NextData, [{next_event, internal, send}]};
         false ->
             {keep_state, NextData}
@@ -188,9 +181,16 @@ sending(
 sending(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
-rate_limited(internal, {retry_after, Seconds}, _Data) ->
-    RetryTimeoutAction = {state_timeout, Seconds * 1000, retry},
-    {keep_state_and_data, [RetryTimeoutAction]};
+rate_limited(internal, {retry_after, RetryAfter}, _Data) ->
+    Timeout =
+        case cow_http_hd:parse_retry_after(RetryAfter) of
+            Seconds when is_integer(Seconds) ->
+                Seconds * 1000;
+            {{_Y, _M, _D}, {_H, _MM, _S}} ->
+                %% TODO: support date in future
+                60_000
+        end,
+    {keep_state_and_data, [{state_timeout, Timeout, retry}]};
 rate_limited(state_timeout, retry, Data) ->
     case queue:is_empty(Data#data.q) of
         true ->
