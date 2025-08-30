@@ -34,8 +34,8 @@
     dsn :: binary(),
     conn :: pid() | undefined,
     conn_mref,
-    q :: queue:queue() | undefined,
-    posted = [] :: list(gun:stream_ref())
+    q :: queue:queue(),
+    posted :: list(gun:stream_ref())
 }).
 
 name() -> ?MODULE.
@@ -62,7 +62,11 @@ capture(Capture) ->
 
 init([]) ->
     quickrand_cache:init(),
-    State = #data{dsn = golare_config:dsn()},
+    State = #data{
+        dsn = golare_config:dsn(),
+        q = queue:new(),
+        posted = []
+    },
     case State#data.dsn of
         <<>> ->
             Actions = [];
@@ -106,7 +110,7 @@ started(internal, connect, #data{dsn = DSN} = State) ->
         end,
     {ok, Conn} = gun:open(binary_to_list(Host), Port, Opts),
     Mref = monitor(process, Conn),
-    {next_state, connecting, State#data{conn = Conn, conn_mref = Mref, q = queue:new()}, []};
+    {next_state, connecting, State#data{conn = Conn, conn_mref = Mref}, []};
 started({call, From}, {capture, _Event}, _Data) ->
     EventId = uuid:get_v4(cached),
     {keep_state_and_data, [{reply, From, {ok, EventId}}]};
@@ -148,7 +152,12 @@ sending(
             keep_state_and_data;
         429 ->
             RetryAfter = proplists:get_value(<<"retry-after">>, Headers, <<"60">>),
-            Seconds = binary_to_integer(RetryAfter),
+            Seconds = case cow_http_hd:parse_retry_after(RetryAfter) of
+                S when is_integer(S) -> S;
+                {{_Y, _M, _D}, {_H, _MM, _S}} ->
+                    %% TODO: support date in future
+                    60
+            end,
             NextEvent = {next_event, internal, {retry_after, Seconds}},
             lists:foreach(
                 fun(Ref) ->

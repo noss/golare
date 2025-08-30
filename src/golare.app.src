@@ -1,6 +1,6 @@
 {application, golare, [
     {description, "A sentry SDK for erlang"},
-    {vsn, "0.2.4"},
+    {vsn, "0.2.5"},
     {registered, []},
     {mod, {golare, []}},
     {applications, [
@@ -9,6 +9,7 @@
         certifi,
         quickrand,
         uuid,
+        cowlib,
         gun
     ]},
     {env, [
