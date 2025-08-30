@@ -22,7 +22,7 @@ changing_config(_SetOrUpdate, _OldConfig, NewConfig) ->
 filter_config(Config) ->
     Config.
 
-log(#{level := Level}=LogEvent, _Config) ->
+log(#{level := Level} = LogEvent, _Config) ->
     try
         Event0 = #{
             level => sentry_level(Level),
@@ -33,7 +33,7 @@ log(#{level := Level}=LogEvent, _Config) ->
         },
         Event = maps:merge(Event0, describe(LogEvent)),
         {ok, _EventId} = golare:capture_event(Event)
-    catch 
+    catch
         Type:Rsn:Trace ->
             Crash = #{
                 logger => ?MODULE,
@@ -43,16 +43,17 @@ log(#{level := Level}=LogEvent, _Config) ->
                 },
                 exception => #{
                     values => [
-                            #{
-                                type => <<"sdk crash">>,
-                                value => print({Type, Rsn, Trace}),
-                                stacktrace => case [frame(T) || T <- Trace] of
-                                        [] -> null;
-                                        Frames -> #{frames => lists:reverse(Frames)}
-                                    end
-                            }
-                        ]
-                    }
+                        #{
+                            type => <<"sdk crash">>,
+                            value => print({Type, Rsn, Trace}),
+                            stacktrace =>
+                                case [frame(T) || T <- Trace] of
+                                    [] -> null;
+                                    Frames -> #{frames => lists:reverse(Frames)}
+                                end
+                        }
+                    ]
+                }
             },
             golare:capture_event(Crash)
     end.
@@ -82,59 +83,67 @@ logger_name(_) ->
 describe(#{msg := {report, Report}, meta := Meta}) ->
     describe_report(Report, Meta);
 describe(#{msg := {string, Raw}, meta := _Meta}) ->
-    #{logentry =>
-        #{formatted => unicode:characters_to_binary(Raw) }
-    };
-describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params)->
     #{
         logentry =>
-            #{formatted => format(FormatString, Params),
-              message => unicode:characters_to_binary(FormatString),
-              params => [format("~tp", [P]) || P <- Params]
-             },
+            #{formatted => unicode:characters_to_binary(Raw)}
+    };
+describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params) ->
+    #{
+        logentry =>
+            #{
+                formatted => format(FormatString, Params),
+                message => unicode:characters_to_binary(FormatString),
+                params => [format("~tp", [P]) || P <- Params]
+            },
         extra =>
-            #{ K => print(V) || K := V <- maps:without([time], Meta)}
+            #{K => print(V) || K := V <- maps:without([time], Meta)}
     };
 describe(#{msg := Fallback, meta := #{mfa := _MFA, line := _Line}}) ->
     #{
         logentry => #{
             formatted => print(Fallback)
-            }
+        }
         %%fingerprint =>
         %%    [print(I) || I <- [MFA, Line]]
     };
 describe(#{msg := Fallback}) ->
-    #{logentry =>
-        #{formatted => print(Fallback)}
+    #{
+        logentry =>
+            #{formatted => print(Fallback)}
     }.
 
 describe_report(#{label := Label, format := Format, args := Args}, Meta) ->
-    #{logentry =>
-        #{message => unicode:characters_to_binary(Format),
-          params => [format("~tp", [A]) || A <- Args],
-          formatted => format(Format, Args)
-        },
+    #{
+        logentry =>
+            #{
+                message => unicode:characters_to_binary(Format),
+                params => [format("~tp", [A]) || A <- Args],
+                formatted => format(Format, Args)
+            },
         extra =>
-            #{ K => print(V) || K := V <- maps:without([time], Meta)},
+            #{K => print(V) || K := V <- maps:without([time], Meta)},
         logger => print(Label)
     };
-describe_report(#{label := Label, report := _}=Report, Meta) ->
-    #{logentry =>
-        #{message => print(Label),
-          formatted => print(Report)
-        },
+describe_report(#{label := Label, report := _} = Report, Meta) ->
+    #{
+        logentry =>
+            #{
+                message => print(Label),
+                formatted => print(Report)
+            },
         logger => print(Label),
         exception => describe_error_info(Report),
         extra =>
-            #{ K => print(V) || K := V <- maps:without([time, report_cb], Meta)}
+            #{K => print(V) || K := V <- maps:without([time, report_cb], Meta)}
         %%fingerprint => fingerprint_report(Report)
     };
 describe_report(Report, _Meta) ->
-    #{logentry => 
-        #{formatted => write(Report)}
-     }.
+    #{
+        logentry =>
+            #{formatted => write(Report)}
+    }.
 
-describe_error_info(#{report := [[{_, _}|_]=KVs|_]}) ->
+describe_error_info(#{report := [[{_, _} | _] = KVs | _]}) ->
     case proplists:get_value(error_info, KVs) of
         {Type, Rsn, Trace} ->
             #{
@@ -142,7 +151,8 @@ describe_error_info(#{report := [[{_, _}|_]=KVs|_]}) ->
                     #{
                         type => print(Type),
                         value => print(Rsn),
-                        stacktrace => case [frame(T) || T <- Trace] of
+                        stacktrace =>
+                            case [frame(T) || T <- Trace] of
                                 [] -> null;
                                 Frames -> #{frames => lists:reverse(Frames)}
                             end
@@ -156,12 +166,17 @@ describe_error_info(_) ->
     null.
 
 frame({M, F, A, Opts}) ->
-    ArgNum = if is_integer(A) -> A; is_list(A) -> length(A) end,
+    ArgNum =
+        if
+            is_integer(A) -> A;
+            is_list(A) -> length(A)
+        end,
     MFA = format("~p:~p/~b", [M, F, ArgNum]),
-    Filename = case proplists:get_value(file, Opts) of
-        undefined -> null;
-        String -> unicode:characters_to_binary(String)
-    end,
+    Filename =
+        case proplists:get_value(file, Opts) of
+            undefined -> null;
+            String -> unicode:characters_to_binary(String)
+        end,
     #{
         function => MFA,
         lineno => proplists:get_value(line, Opts, null),

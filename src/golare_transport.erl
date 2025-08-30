@@ -84,18 +84,18 @@ callback_mode() ->
 %%% States
 %%%===================================================================
 
-started(internal, connect, #data{dsn = DSN}=State) ->
+started(internal, connect, #data{dsn = DSN} = State) ->
     ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
-    Port = case maps:get(port, ParsedDSN, undefined) of
-        undefined when Scheme == <<"http">> -> 80;
-        undefined when Scheme == <<"https">> -> 443;
-        P -> P
-    end,
+    Port =
+        case maps:get(port, ParsedDSN, undefined) of
+            undefined when Scheme == <<"http">> -> 80;
+            undefined when Scheme == <<"https">> -> 443;
+            P -> P
+        end,
     Opts = #{http_opts => #{keepalive => 20}},
     {ok, Conn} = gun:open(binary_to_list(Host), Port, Opts),
     Mref = monitor(process, Conn),
-    {next_state, connecting,
-        State#data{conn = Conn, conn_mref = Mref, q = queue:new()}, []};
+    {next_state, connecting, State#data{conn = Conn, conn_mref = Mref, q = queue:new()}, []};
 started({call, From}, {capture, _Event}, _Data) ->
     EventId = uuid:get_v4(cached),
     {keep_state_and_data, [{reply, From, {ok, EventId}}]};
@@ -203,10 +203,11 @@ handle_event(_EventType, _EventContent, _Data) ->
 post_capture(#data{conn = Conn, dsn = DSN}, #envelope{
     event_id = RawEventId, type = Type, payload = Event
 }) ->
-    StreamRef = gun:post(Conn,
+    StreamRef = gun:post(
+        Conn,
         ["/api", dsn_project_id(DSN), "/envelope/"],
-        #{ <<"content-type">> => <<"application/x-sentry-envelope">> }
-        ),
+        #{<<"content-type">> => <<"application/x-sentry-envelope">>}
+    ),
     Body = [envelope_header(RawEventId, DSN), $\n, encode_items(Type, Event)],
     ok = gun:data(Conn, StreamRef, fin, Body),
     {ok, StreamRef}.

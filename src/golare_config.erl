@@ -13,7 +13,7 @@ environment() ->
 
 %% Internal
 
-lookup(EnvName, ConfigName, Default)  ->
+lookup(EnvName, ConfigName, Default) ->
     case {os:getenv(EnvName), application:get_env(golare, ConfigName, false)} of
         {false, false} -> Default;
         {false, Config} -> type_match(Config, Default);
