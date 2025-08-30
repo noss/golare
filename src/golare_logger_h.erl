@@ -103,8 +103,6 @@ describe(#{msg := Fallback, meta := #{mfa := _MFA, line := _Line}}) ->
         logentry => #{
             formatted => print(Fallback)
         }
-        %%fingerprint =>
-        %%    [print(I) || I <- [MFA, Line]]
     };
 describe(#{msg := Fallback}) ->
     #{
@@ -182,19 +180,6 @@ frame({M, F, A, Opts}) ->
         lineno => proplists:get_value(line, Opts, null),
         filename => Filename
     }.
-
-%%fingerprint_report(#{label := Label, report := [[{_,_}|_]=KV| _]}) ->
-%%    Fingerprints = [
-%%        Label,
-%%        case proplists:get_value(initial_call, KV) of
-%%            {M, F, Args} when is_list(Args) -> {M, F, length(Args)};
-%%            Other -> Other
-%%        end,
-%%        proplists:get_value(process_label, KV)
-%%    ],
-%%    [write(I) || I <- Fingerprints];
-%%fingerprint_report(_) ->
-%%    null.
 
 format(Format, Args) ->
     Msg = io_lib:format(Format, Args),
