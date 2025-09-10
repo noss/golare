@@ -81,7 +81,7 @@ context_os(_) ->
 
 context_runtime() ->
     Vsn = list_to_binary(erlang:system_info(otp_release)),
-    Raw = list_to_binary(erlang:system_info(system_version)),
+    Raw = string:trim(list_to_binary(erlang:system_info(system_version))),
     #{
         type => runtime,
         name => <<"erlang">>,

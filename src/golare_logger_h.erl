@@ -2,11 +2,29 @@
 
 -behavior(logger_handler).
 
+-export([add_logger/0]).
 -export([adding_handler/1]).
 -export([removing_handler/1]).
 -export([changing_config/3]).
 -export([filter_config/1]).
 -export([log/2]).
+
+%%% Install logger
+
+add_logger() ->
+    case logger:get_handler_config(golare_logger_h) of
+        {ok, _Config} ->
+            ok;
+        {error, {not_found, _}} ->
+            Level = golare_config:logger_level(),
+            Config = #{
+                config => #{},
+                level => Level,
+                filter_default => log,
+                filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
+            },
+            ok = logger:add_handler(golare, golare_logger_h, Config)
+    end.
 
 %%% logger_handler callbacks
 
@@ -22,10 +40,10 @@ changing_config(_SetOrUpdate, _OldConfig, NewConfig) ->
 filter_config(Config) ->
     Config.
 
-log(#{level := Level} = LogEvent, _Config) ->
+log(LogEvent, _Config) ->
     try
         Event0 = #{
-            level => sentry_level(Level),
+            level => sentry_level(LogEvent),
             timestamp => event_timestamp(LogEvent),
             logger => logger_name(LogEvent),
             logentry => null,
@@ -60,6 +78,7 @@ log(#{level := Level} = LogEvent, _Config) ->
 
 %% Internal
 
+sentry_level(#{level := Level}) -> sentry_level(Level);
 sentry_level(emergency) -> fatal;
 sentry_level(alert) -> fatal;
 sentry_level(critical) -> fatal;

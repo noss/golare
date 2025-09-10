@@ -19,7 +19,6 @@ start(normal, _StartArgs) ->
     ok = set_context(),
     ok = set_global_scopes(),
     ok = set_process_scopes(),
-    ok = add_logger(),
     golare_sup:start_link().
 
 stop(_State) ->
@@ -70,13 +69,3 @@ set_context() ->
         runtime => Runtime
     },
     persistent_term:put({golare, contexts}, Context).
-
-add_logger() ->
-    Level = golare_config:logger_level(),
-    Config = #{
-        config => #{},
-        level => Level,
-        filter_default => log,
-        filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
-    },
-    ok = logger:add_handler(golare, golare_logger_h, Config).

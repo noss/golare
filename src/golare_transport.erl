@@ -45,7 +45,8 @@ name() -> ?MODULE.
 %%%===================================================================
 
 start_link() ->
-    gen_statem:start_link({local, name()}, ?MODULE, [], []).
+    Opts = [{debug, [trace]}],
+    gen_statem:start_link({local, name()}, ?MODULE, [], Opts).
 
 -spec capture(term()) -> {ok, EventId :: uuid:uuid() | down}.
 capture(Capture) ->
@@ -89,6 +90,12 @@ callback_mode() ->
 %%%===================================================================
 
 started(internal, connect, #data{dsn = DSN} = State) ->
+    TlsOpts = application:get_env(golare, tls_opts,
+        [
+            {verify, verify_peer},
+            {depth, 99},
+            {cacerts, certifi:cacerts()}
+        ]),
     ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
     Opts = #{
         transport =>
@@ -96,11 +103,7 @@ started(internal, connect, #data{dsn = DSN} = State) ->
                 <<"http">> -> tcp;
                 <<"https">> -> tls
             end,
-        tls_opts => [
-            {verify, verify_peer},
-            {depth, 99},
-            {cacerts, certifi:cacerts()}
-        ]
+        tls_opts => TlsOpts
     },
     Port =
         case maps:get(port, ParsedDSN, undefined) of
@@ -118,6 +121,7 @@ started(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
 connecting(info, {gun_up, Conn, _Protocol}, #data{conn = Conn} = Data) ->
+    %ok = golare_logger_h:add_logger(),
     {next_state, available, Data};
 connecting(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
@@ -146,8 +150,8 @@ sending(internal, send, Data) ->
     NextData = Data#data{q = Q1, posted = Posted},
     {keep_state, NextData, Actions};
 sending(
-    info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}, #data{conn = Conn} = Data
-) ->
+    info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}, Data
+) when Conn == Data#data.conn ->
     case Status of
         200 ->
             keep_state_and_data;
