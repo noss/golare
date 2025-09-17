@@ -62,6 +62,7 @@ capture(Capture) ->
 
 init([]) ->
     quickrand_cache:init(),
+    ok = add_logger(),
     State = #data{
         dsn = golare_config:dsn(),
         q = queue:new(),
@@ -76,6 +77,7 @@ init([]) ->
     {ok, started, State, Actions}.
 
 terminate(_Reason, _State, _Data) ->
+    ok = remove_logger(),
     ok.
 
 format_status(Status) ->
@@ -300,3 +302,22 @@ overflow(Q, MaxLen) ->
         _ ->
             Q
     end.
+
+add_logger() ->
+    case logger:get_handler_config(golare) of
+        {ok, _Config} ->
+            ok;
+        {error, {not_found, _}} ->
+            Level = golare_config:logger_level(),
+            Config = #{
+                config => #{},
+                level => Level,
+                filter_default => log,
+                filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
+            },
+            ok = logger:add_handler(golare, golare_logger_h, Config)
+    end.
+
+remove_logger() ->
+    _ = logger:remove_handler(golare),
+    ok.
