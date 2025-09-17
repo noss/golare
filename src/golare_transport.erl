@@ -304,14 +304,19 @@ overflow(Q, MaxLen) ->
     end.
 
 add_logger() ->
-    Level = golare_config:logger_level(),
-    Config = #{
-        config => #{},
-        level => Level,
-        filter_default => log,
-        filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
-    },
-    ok = logger:add_handler(golare, golare_logger_h, Config).
+    case logger:get_handler_config(golare_logger_h) of
+        {ok, _Config} ->
+            ok;
+        {error, {not_found, _}} ->
+            Level = golare_config:logger_level(),
+            Config = #{
+                config => #{},
+                level => Level,
+                filter_default => log,
+                filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
+            },
+            ok = logger:add_handler(golare, golare_logger_h, Config)
+    end.
 
 remove_logger() ->
     _ = logger:remove_handler(golare),
