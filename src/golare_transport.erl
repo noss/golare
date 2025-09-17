@@ -304,7 +304,7 @@ overflow(Q, MaxLen) ->
     end.
 
 add_logger() ->
-    case logger:get_handler_config(golare_logger_h) of
+    case logger:get_handler_config(golare) of
         {ok, _Config} ->
             ok;
         {error, {not_found, _}} ->
