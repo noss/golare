@@ -52,6 +52,8 @@ log(LogEvent, _Config) ->
         Event = maps:merge(Event0, describe(LogEvent)),
         {ok, _EventId} = golare:capture_event(Event)
     catch
+        exit:{noproc, _} ->
+            ok;
         Type:Rsn:Trace ->
             Crash = #{
                 logger => ?MODULE,
