@@ -127,7 +127,7 @@ started(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
 connecting(info, {gun_up, Conn, _Protocol}, #data{conn = Conn} = Data) ->
-    ok = golare_logger_h:add_logger(),
+    ok = add_logger(),
     {next_state, available, Data};
 connecting(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).

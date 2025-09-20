@@ -67,6 +67,7 @@ groups() ->
             string_log_mfa,
             format_log,
             format_log_mfa,
+            report_map,
             proc_lib_crash
         ]}
     ].
@@ -250,6 +251,98 @@ proc_lib_crash(_Config) ->
             <<"value">> := <<"exit test">>
         },
         ExceptionValue
+    ),
+    ok.
+
+report_map(_Config) ->
+    Report =
+        #{
+            reason => {party_error, {error, function_clause}},
+            msg => <<"Controller crashed">>,
+            stacktrace =>
+                [
+                    #{
+                        arity => 1,
+                        function => '-post_agreement/1-fun-0-',
+                        line => 123,
+                        module => signatures_sender_controller,
+                        file => "/buildroot/src/signatures_sender_controller.erl"
+                    },
+                    #{
+                        arity => 4,
+                        function => '-new_transaction/3-fun-0-',
+                        line => 180,
+                        module => pgo,
+                        file => "/buildroot/_build/default/lib/pgo/src/pgo.erl"
+                    },
+                    #{
+                        arity => 5,
+                        function => with_span,
+                        line => 47,
+                        module => otel_tracer_default,
+                        file =>
+                            "/buildroot/_build/default/lib/opentelemetry/src/otel_tracer_default.erl"
+                    },
+                    #{
+                        arity => 1,
+                        function => post_agreement,
+                        line => 115,
+                        module => signatures_sender_controller,
+                        file => "/buildroot/src/signatures_sender_controller.erl"
+                    },
+                    #{
+                        arity => 2,
+                        function => execute,
+                        line => 51,
+                        module => nova_handler,
+                        file =>
+                            "/buildroot/_build/default/lib/nova/src/nova_handler.erl"
+                    },
+                    #{
+                        arity => 3,
+                        function => execute,
+                        line => 310,
+                        module => cowboy_stream_h,
+                        file =>
+                            "/buildroot/_build/default/lib/cowboy/src/cowboy_stream_h.erl"
+                    },
+                    #{
+                        arity => 3,
+                        function => request_process,
+                        line => 299,
+                        module => cowboy_stream_h,
+                        file =>
+                            "/buildroot/_build/default/lib/cowboy/src/cowboy_stream_h.erl"
+                    },
+                    #{
+                        arity => 3,
+                        function => init_p_do_apply,
+                        line => 333,
+                        module => proc_lib,
+                        file => "proc_lib.erl"
+                    }
+                ],
+            class => throw
+        },
+    LogItem = #{level => warning, meta => #{time => 0}, msg => {report, Report}},
+    {ok, EventId} = golare_logger_h:log(LogItem, #{}),
+    {_, Item} = wait_for(EventId),
+    ct:pal(default, "Captured:~n~p", [Item]),
+    ?assertMatch(
+        #{
+            <<"level">> := <<"warning">>,
+            <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
+            <<"logentry">> := #{
+                <<"formatted">> :=
+                    <<"[{msg,<<\"Controller crashed\">>},\n {reason,{party_error,{error,function_clause}}}]">>
+            },
+            <<"extra">> := #{
+                <<"class">> := _,
+                <<"stacktrace">> := _,
+                <<"reason">> := _
+            }
+        },
+        Item
     ),
     ok.
 

@@ -166,11 +166,19 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
             Event1
     end;
 describe(E0, #{msg := {report, Report}, meta := Meta}) when is_map(Report) ->
+    Fields = [message, msg, reason],
+    case maps:with(Fields, Report) of
+        Map when map_size(Map) > 0 ->
+            Values = [{F, maps:get(F, Map)} || F <- Fields, is_map_key(F, Map)],
+            Message = format("~p", [Values]);
+        _ ->
+            Message = print(Report)
+    end,
     E1 = E0#{
         logentry =>
-            #{formatted => print(Report)}
+            #{formatted => Message}
     },
-    describe_log(E1, Report, Meta);
+    describe_log(E1, Message, Report, Meta);
 describe(E0, #{msg := {string, Raw}, meta := Meta}) ->
     E1 = E0#{
         logentry =>
@@ -193,17 +201,7 @@ describe(Event0, #{msg := Fallback}) ->
             #{formatted => print(Fallback)}
     }.
 
-describe_log(E0, Report, Meta) ->
-    case Report of
-        #{message := Mess} ->
-            Message = Mess;
-        #{msg := M} ->
-            Message = M;
-        #{reason := Rsn} ->
-            Message = Rsn;
-        _ ->
-            Message = Report
-    end,
+describe_log(E0, Message, Report, Meta) ->
     E1 = maybe_mfa(E0, Message, Meta),
     E1#{
         extra => #{K => print(V) || K := V <- Report, is_atom(K)}
