@@ -45,7 +45,8 @@ name() -> ?MODULE.
 %%%===================================================================
 
 start_link() ->
-    Opts = [{debug, [trace]}],
+    %[{debug, [trace]}],
+    Opts = [],
     gen_statem:start_link({local, name()}, ?MODULE, [], Opts).
 
 -spec capture(term()) -> {ok, EventId :: uuid:uuid() | down}.
@@ -92,12 +93,15 @@ callback_mode() ->
 %%%===================================================================
 
 started(internal, connect, #data{dsn = DSN} = State) ->
-    TlsOpts = application:get_env(golare, tls_opts,
+    TlsOpts = application:get_env(
+        golare,
+        tls_opts,
         [
             {verify, verify_peer},
             {depth, 99},
             {cacerts, certifi:cacerts()}
-        ]),
+        ]
+    ),
     ParsedDSN = #{scheme := Scheme, host := Host} = uri_string:parse(DSN),
     Opts = #{
         transport =>

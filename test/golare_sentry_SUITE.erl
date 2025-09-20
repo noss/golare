@@ -65,7 +65,9 @@ groups() ->
         {log, [shuffle], [
             string_log,
             string_log_mfa,
-            format_log
+            format_log,
+            format_log_mfa,
+            proc_lib_crash
         ]}
     ].
 
@@ -141,7 +143,7 @@ string_log(_Config) ->
 string_log_mfa(_Config) ->
     LogItem = #{
         level => warning,
-        meta => #{time => 0, mfa => {foo, bar, 0}},
+        meta => #{time => 0, mfa => {foo, bar, 0}, file => "foo.erl", line => 42},
         msg => {string, <<"hello world">>}
     },
     {ok, EventId} = golare_logger_h:log(LogItem, #{}),
@@ -152,7 +154,8 @@ string_log_mfa(_Config) ->
             <<"level">> := <<"warning">>,
             <<"logger">> := <<"foo:bar/0">>,
             <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
-            <<"logentry">> := #{<<"formatted">> := <<"hello world">>}
+            <<"logentry">> := #{<<"formatted">> := <<"hello world">>},
+            <<"exception">> := _
         },
         Item
     ),
@@ -174,6 +177,79 @@ format_log(_Config) ->
             }
         },
         Item
+    ),
+    ok.
+
+format_log_mfa(_Config) ->
+    Meta = #{time => 0, mfa => {foo, bar, 0}, file => "foo.erl", line => 42},
+    LogItem = #{level => warning, meta => Meta, msg => {"format ~b", [42]}},
+    {ok, EventId} = golare_logger_h:log(LogItem, #{}),
+    {_, Item} = wait_for(EventId),
+    ct:pal(default, "Captured: ~p", [Item]),
+    ?assertMatch(
+        #{
+            <<"level">> := <<"warning">>,
+            <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
+            <<"logentry">> := #{
+                <<"message">> := <<"format ~b">>,
+                <<"formatted">> := <<"format 42">>,
+                <<"params">> := [_]
+            },
+            <<"exception">> := _
+        },
+        Item
+    ),
+    ok.
+
+proc_lib_crash(_Config) ->
+    CrashReport = [
+        {initial_call, {testmod, testfun, 0}},
+        {pid, self()},
+        {registered_name, fake},
+        {process_label, testlabel},
+        {error_info, {exit, test, []}},
+        {ancestors, []},
+        {message_queue_len, 0},
+        {links, []},
+        {dictionary, []}
+    ],
+    LinkReports = [],
+    Report =
+        {report, #{
+            label => {proc_lib, crash},
+            report => [CrashReport, LinkReports]
+        }},
+    Meta = #{
+        domain => [otp, sasl],
+        report_cb => fun proc_lib:report_cb/2,
+        logger_formatter => #{title => "CRASH REPORT"},
+        error_logger => #{tag => error_report, type => crash_report}
+    },
+    LogItem = #{level => warning, meta => Meta#{time => 0}, msg => Report},
+    {ok, EventId} = golare_logger_h:log(LogItem, #{}),
+    {_, Item} = wait_for(EventId),
+    ct:pal(default, "Captured: ~p", [Item]),
+    ?assertMatch(
+        #{
+            <<"level">> := <<"warning">>,
+            <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
+            <<"logger">> := <<"{proc_lib,crash}">>,
+            <<"logentry">> := #{
+                <<"formatted">> := _
+            },
+            <<"exception">> := #{
+                <<"values">> := [_Values]
+            }
+        },
+        Item
+    ),
+    #{<<"exception">> := #{<<"values">> := [ExceptionValue]}} = Item,
+    ?assertMatch(
+        #{
+            <<"type">> := <<"{proc_lib,crash} {initial_call,{testmod,testfun,0}}">>,
+            <<"value">> := <<"exit test">>
+        },
+        ExceptionValue
     ),
     ok.
 

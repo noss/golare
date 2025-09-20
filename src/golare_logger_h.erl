@@ -41,15 +41,14 @@ filter_config(Config) ->
     Config.
 
 log(LogEvent, _Config) ->
+    %erlang:display(LogEvent),
     try
         Event0 = #{
             level => sentry_level(LogEvent),
-            timestamp => event_timestamp(LogEvent),
-            logger => logger_name(LogEvent),
-            logentry => null,
-            fingerprint => null
+            timestamp => event_timestamp(LogEvent)
         },
-        Event = maps:merge(Event0, describe(LogEvent)),
+        Event1 = logger_name(Event0, LogEvent),
+        Event = describe(Event1, LogEvent),
         {ok, _EventId} = golare:capture_event(Event)
     catch
         exit:{noproc, _} ->
@@ -65,7 +64,7 @@ log(LogEvent, _Config) ->
                     values => [
                         #{
                             type => <<"sdk crash">>,
-                            value => print({Type, Rsn, Trace}),
+                            value => print(Rsn),
                             stacktrace =>
                                 case [frame(T) || T <- Trace] of
                                     [] -> null;
@@ -80,136 +79,180 @@ log(LogEvent, _Config) ->
 
 %% Internal
 
-sentry_level(#{level := Level}) -> sentry_level(Level);
-sentry_level(emergency) -> fatal;
-sentry_level(alert) -> fatal;
-sentry_level(critical) -> fatal;
-sentry_level(error) -> error;
-sentry_level(warning) -> warning;
-sentry_level(notice) -> info;
-sentry_level(info) -> info;
-sentry_level(debug) -> debug;
-sentry_level(_) -> info.
+sentry_level(#{level := Level}) ->
+    sentry_level(Level);
+sentry_level(emergency) ->
+    fatal;
+sentry_level(alert) ->
+    fatal;
+sentry_level(critical) ->
+    fatal;
+sentry_level(error) ->
+    error;
+sentry_level(warning) ->
+    warning;
+sentry_level(notice) ->
+    info;
+sentry_level(info) ->
+    info;
+sentry_level(debug) ->
+    debug;
+sentry_level(_) ->
+    info.
 
 event_timestamp(#{meta := #{time := MicrosecondEpoch}}) ->
     Opts = [{unit, microsecond}, {offset, "Z"}],
     Rfc3339 = calendar:system_time_to_rfc3339(MicrosecondEpoch, Opts),
     iolist_to_binary(Rfc3339).
 
-logger_name(#{meta := #{mfa := {M, F, A}}}) ->
-    format("~s:~s/~b", [M, F, A]);
-logger_name(_) ->
-    null.
+logger_name(Event, #{meta := #{mfa := {M, F, A}}}) ->
+    Event#{logger => format("~s:~s/~b", [M, F, A])};
+logger_name(Event, #{msg := {report, #{label := Label}}}) ->
+    Event#{logger => format("~p", [Label])};
+logger_name(Event, _) ->
+    Event.
 
-describe(#{msg := {report, Report}, meta := Meta}) ->
-    describe_report(Report, Meta);
-describe(#{msg := {string, Raw}, meta := _Meta}) ->
-    #{
+describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}}) ->
+    Formatted =
+        case ReportFun of
+            Fun when is_function(Fun, 1) ->
+                Fun(TopReport);
+            Fun when is_function(Fun, 2) ->
+                Config = #{
+                    depth => 5,
+                    chars_limit => unlimited,
+                    single_line => false,
+                    encoding => utf8
+                },
+                Fun(TopReport, Config)
+        end,
+    Event1 = Event0#{
+        logentry => #{
+            formatted => iolist_to_binary(Formatted)
+        }
+    },
+    case TopReport of
+        #{label := {proc_lib, crash} = Label, report := [Info | _]} ->
+            {error_info, {ErrorClass, Reason, Trace}} = lists:keyfind(error_info, 1, Info),
+            Event1#{
+                exception => #{
+                    values => [
+                        #{
+                            type => print(Label, lists:keyfind(initial_call, 1, Info)),
+                            value => print(ErrorClass, Reason),
+                            stacktrace =>
+                                case [frame(T) || T <- Trace] of
+                                    [] -> #{};
+                                    Frames -> #{frames => lists:reverse(Frames)}
+                                end
+                        }
+                    ]
+                }
+            };
+        #{label := {supervisor, error}, report := Info} ->
+            Supervisor = lists:keyfind(supervisor, 1, Info),
+            Reason = lists:keyfind(reason, 1, Info),
+            Event1#{
+                exception => #{
+                    values => [
+                        #{
+                            type => print(Supervisor),
+                            value => print(Reason)
+                        }
+                    ]
+                }
+            };
+        _ ->
+            Event1
+    end;
+describe(E0, #{msg := {report, Report}, meta := Meta}) when is_map(Report) ->
+    E1 = E0#{
+        logentry =>
+            #{formatted => print(Report)}
+    },
+    describe_log(E1, Report, Meta);
+describe(E0, #{msg := {string, Raw}, meta := Meta}) ->
+    E1 = E0#{
         logentry =>
             #{formatted => unicode:characters_to_binary(Raw)}
-    };
-describe(#{msg := {FormatString, Params}, meta := Meta}) when is_list(Params) ->
-    #{
+    },
+    maybe_mfa(E1, Raw, Meta);
+describe(E0, #{msg := {FormatString, Params}, meta := Meta}) when is_list(Params) ->
+    E1 = E0#{
         logentry =>
             #{
                 formatted => format(FormatString, Params),
                 message => unicode:characters_to_binary(FormatString),
                 params => [format("~tp", [P]) || P <- Params]
-            },
-        extra =>
-            #{K => print(V) || K := V <- maps:without([time], Meta)}
-    };
-describe(#{msg := Fallback, meta := #{mfa := _MFA, line := _Line}}) ->
-    #{
-        logentry => #{
-            formatted => print(Fallback)
-        }
-    };
-describe(#{msg := Fallback}) ->
-    #{
+            }
+    },
+    maybe_mfa(E1, FormatString, Meta);
+describe(Event0, #{msg := Fallback}) ->
+    Event0#{
         logentry =>
             #{formatted => print(Fallback)}
     }.
 
-describe_report(#{label := Label, format := Format, args := Args}, Meta) ->
-    #{
-        logentry =>
-            #{
-                message => unicode:characters_to_binary(Format),
-                params => [format("~tp", [A]) || A <- Args],
-                formatted => format(Format, Args)
-            },
-        extra =>
-            #{K => print(V) || K := V <- maps:without([time], Meta)},
-        logger => print(Label)
-    };
-describe_report(#{label := Label, report := _} = Report, Meta) ->
-    #{
-        logentry =>
-            #{
-                message => print(Label),
-                formatted => print(Report)
-            },
-        logger => print(Label),
-        exception => describe_error_info(Report),
-        extra =>
-            #{K => print(V) || K := V <- maps:without([time, report_cb], Meta)}
-        %%fingerprint => fingerprint_report(Report)
-    };
-describe_report(Report, _Meta) ->
-    #{
-        logentry =>
-            #{formatted => write(Report)}
+describe_log(E0, Report, Meta) ->
+    case Report of
+        #{message := Mess} ->
+            Message = Mess;
+        #{msg := M} ->
+            Message = M;
+        #{reason := Rsn} ->
+            Message = Rsn;
+        _ ->
+            Message = Report
+    end,
+    E1 = maybe_mfa(E0, Message, Meta),
+    E1#{
+        extra => #{K => print(V) || K := V <- Report, is_atom(K)}
     }.
 
-describe_error_info(#{report := [[{_, _} | _] = KVs | _]}) ->
-    case proplists:get_value(error_info, KVs) of
-        {Type, Rsn, Trace} ->
-            #{
-                values => [
-                    #{
-                        type => print(Type),
-                        value => print(Rsn),
-                        stacktrace =>
-                            case [frame(T) || T <- Trace] of
-                                [] -> null;
-                                Frames -> #{frames => lists:reverse(Frames)}
-                            end
-                    }
-                ]
-            };
-        _ ->
-            null
-    end;
-describe_error_info(_) ->
-    null.
+maybe_mfa(E0, Message, #{mfa := {Mod, Fun, A}, file := Filename, line := Line}) ->
+    Value = #{
+        type => print(Message),
+        stacktrace => #{
+            frames => [
+                frame({Mod, Fun, A, [{filename, Filename}, {line, Line}]})
+            ]
+        }
+    },
+    Exception = #{values => [Value]},
+    E0#{
+        exception => Exception
+    };
+maybe_mfa(E0, _Message, _Meta) ->
+    E0.
 
 frame({M, F, A, Opts}) ->
-    ArgNum =
-        if
-            is_integer(A) -> A;
-            is_list(A) -> length(A)
-        end,
-    MFA = format("~p:~p/~b", [M, F, ArgNum]),
-    Filename =
-        case proplists:get_value(file, Opts) of
-            undefined -> null;
-            String -> unicode:characters_to_binary(String)
-        end,
-    #{
-        function => MFA,
-        lineno => proplists:get_value(line, Opts, null),
-        filename => Filename
-    }.
+    case A of
+        _ when is_integer(A) -> ArgNum = A;
+        _ when is_list(A) -> ArgNum = length(A)
+    end,
+    F0 = #{function => format("~p:~p/~b", [M, F, ArgNum])},
+    F1 = frame_extra(F0, lists:keyfind(file, 1, Opts)),
+    F2 = frame_extra(F1, lists:keyfind(line, 1, Opts)),
+    F2.
+
+frame_extra(F, {file, String}) ->
+    F#{filename => unicode:characters_to_binary(String)};
+frame_extra(F, {line, Line}) ->
+    F#{line => Line};
+frame_extra(F, _) ->
+    F.
 
 format(Format, Args) ->
-    Msg = io_lib:format(Format, Args),
-    unicode:characters_to_binary(Msg).
+    try
+        Msg = io_lib:format(Format, Args),
+        unicode:characters_to_binary(Msg)
+    catch
+        error:badarg ->
+            print([format_error, Format, Args])
+    end.
 
-print(Term) ->
-    Printed = io_lib:print(Term),
-    unicode:characters_to_binary(Printed).
-
-write(Term) ->
-    Written = io_lib:write(Term),
-    unicode:characters_to_binary(Written).
+print(Term) -> print_list([Term]).
+print(Term1, Term2) -> print_list([Term1, Term2]).
+print_list(Terms) ->
+    Printed = [io_lib:print(T) || T <- Terms],
+    unicode:characters_to_binary(lists:join(" ", Printed)).
