@@ -28,18 +28,30 @@ add_logger() ->
 
 %%% logger_handler callbacks
 
+-spec adding_handler(Config1) -> {ok, Config2} | {error, Reason} when
+    Config1 :: logger_handler:config(), Config2 :: logger_handler:config(), Reason :: term().
 adding_handler(Config) ->
     {ok, Config}.
 
+-spec removing_handler(Config) -> ok when Config :: logger_handler:config().
 removing_handler(_Config) ->
     ok.
 
+-spec changing_config(SetOrUpdate, OldConfig, NewConfig) -> {ok, Config} | {error, Reason} when
+    SetOrUpdate :: set | update,
+    OldConfig :: logger_handler:config(),
+    NewConfig :: logger_handler:config(),
+    Config :: logger_handler:config(),
+    Reason :: term().
 changing_config(_SetOrUpdate, _OldConfig, NewConfig) ->
     {ok, NewConfig}.
 
+-spec filter_config(Config) -> FilteredConfig when
+    Config :: logger_handler:config(), FilteredConfig :: logger_handler:config().
 filter_config(Config) ->
     Config.
 
+-spec log(logger:log_event(), logger_handler:config()) -> term().
 log(LogEvent, _Config) ->
     %erlang:display(LogEvent),
     try
