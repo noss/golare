@@ -202,11 +202,19 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
             reason := Reason0,
             client_info := ClientInfo
         } ->
+            erlang:display(TopReport),
+            ServerThread0 = #{
+                id => print(self()),
+                name => format("server ~tp", [Name]),
+                state => print(Label),
+                current => true,
+                crashed => true
+            },
             case ClientInfo of
                 undefined ->
-                    ClientThread = [];
+                    ClientThreads = [];
                 {ClientPid, {ClientName, ClientTrace}} ->
-                    ClientThread = [
+                    ClientThreads = [
                         #{
                             id => print(ClientPid),
                             name => format("client ~tp", [ClientName]),
@@ -221,24 +229,18 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
                 {_Reason, [{_Mod, _Fun, _A, _Opts} | _] = ServerTrace} when
                     is_atom(_Mod), is_atom(_Fun), is_list(_Opts)
                 ->
-                    ServerThread = [
-                        #{
-                            id => print(self()),
-                            name => print(Name),
-                            state => print(Label),
-                            crashed => true,
-                            current => true,
+                    ServerThread =
+                        ServerThread0#{
                             stacktrace => #{
                                 frames => lists:reverse([frame(F) || F <- ServerTrace])
                             }
-                        }
-                    ];
+                        };
                 _ ->
-                    ServerThread = []
+                    ServerThread = ServerThread0
             end,
             Event1#{
                 threads => #{
-                    values => ServerThread ++ ClientThread
+                    values => [ServerThread | ClientThreads]
                 }
             };
         _ ->

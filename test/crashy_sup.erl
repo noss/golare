@@ -22,14 +22,7 @@ init([]) ->
         intensity => 10,
         period => 60
     },
-    ChildSpecs = [connection_childspec()],
+    ChildSpecs = [crashy_server:childspec()],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
-
-connection_childspec() ->
-    #{
-        id => crashy_server,
-        start => {crashy_server, start_link, []},
-        shutdown => 5_000
-    }.
