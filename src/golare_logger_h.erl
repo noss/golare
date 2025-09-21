@@ -136,8 +136,7 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
             Config = #{
                 depth => 5,
                 chars_limit => unlimited,
-                single_line => false,
-                encoding => utf8
+                single_line => false
             },
             Formatted = Fun(TopReport, Config),
             LogEntry = #{
