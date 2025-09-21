@@ -147,27 +147,42 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
         logentry => LogEntry
     },
     case TopReport of
-        #{label := {proc_lib, crash} = Label, report := [Info | _]} ->
+        #{label := {proc_lib, crash} = _Label, report := [Info, LinkedInfos]} ->
+            CrashThread0 = #{
+                id => print(self()),
+                name => print_list([
+                    proplists:get_value(registered_name, Info), lists:keyfind(initial_call, 1, Info)
+                ])
+            },
             case lists:keyfind(error_info, 1, Info) of
                 false ->
-                    Value = #{};
-                {error_info, {ErrorClass, Reason, Trace}} ->
-                    Value = #{
-                        value => print(ErrorClass, Reason),
-                        stacktrace =>
-                            case [frame(T) || T <- Trace] of
-                                [] -> #{};
-                                Frames -> #{frames => lists:reverse(Frames)}
-                            end
+                    CrashThread = CrashThread0;
+                {error_info, {_ErrorClass, _Reason, Trace}} ->
+                    CrashThread = CrashThread0#{
+                        crashed => true,
+                        current => true,
+                        stacktrace => #{
+                            frames => lists:reverse([frame(T) || T <- Trace])
+                        }
                     }
             end,
+            LinkedThreads = [
+                #{
+                    id => print(proplists:get_value(pid, LI)),
+                    name => print(proplists:get_value(registered_name, LI)),
+                    current => false,
+                    stacktrace => #{
+                        frames => lists:reverse([
+                            frame(T)
+                         || T <- proplists:get_value(current_stacktrace, LI, [])
+                        ])
+                    }
+                }
+             || {neighbour, LI} <- LinkedInfos
+            ],
             Event1#{
-                exception => #{
-                    values => [
-                        Value#{
-                            type => print(Label, lists:keyfind(initial_call, 1, Info))
-                        }
-                    ]
+                threads => #{
+                    values => [CrashThread] ++ LinkedThreads
                 }
             };
         #{label := {supervisor, _} = Label, report := Info} ->
@@ -194,10 +209,10 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
                     ClientThread = [
                         #{
                             id => print(ClientPid),
-                            name => print(ClientName),
+                            name => format("client ~tp", [ClientName]),
                             crashed => true,
                             stacktrace => #{
-                                frames => [frame(F) || F <- ClientTrace]
+                                frames => lists:reverse([frame(F) || F <- ClientTrace])
                             }
                         }
                     ]
@@ -214,7 +229,7 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
                             crashed => true,
                             current => true,
                             stacktrace => #{
-                                frames => [frame(F) || F <- ServerTrace]
+                                frames => lists:reverse([frame(F) || F <- ServerTrace])
                             }
                         }
                     ];
@@ -318,7 +333,7 @@ frame({M, F, A, Opts}) ->
 frame_extra(F, {file, String}) ->
     F#{filename => unicode:characters_to_binary(String)};
 frame_extra(F, {line, Line}) ->
-    F#{line => Line};
+    F#{lineno => Line};
 frame_extra(F, _) ->
     F.
 
@@ -332,7 +347,6 @@ format(Format, Args) ->
     end.
 
 print(Term) -> print_list([Term]).
-print(Term1, Term2) -> print_list([Term1, Term2]).
 print_list(Terms) ->
     Printed = [io_lib:print(T) || T <- Terms],
     unicode:characters_to_binary(lists:join(" ", Printed)).

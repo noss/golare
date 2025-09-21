@@ -288,17 +288,20 @@ proc_lib_crash(_Config) ->
             <<"logentry">> := #{
                 <<"formatted">> := _
             },
-            <<"exception">> := #{
-                <<"values">> := [_Values]
+            <<"threads">> := #{
+                <<"values">> := ThreadValues
             }
-        },
+        } when length(ThreadValues) > 0,
         Item
     ),
-    #{<<"exception">> := #{<<"values">> := [ExceptionValue]}} = Item,
+    #{<<"threads">> := #{<<"values">> := [ExceptionValue]}} = Item,
     ?assertMatch(
         #{
-            <<"type">> := <<"{proc_lib,crash} {initial_call,{testmod,testfun,0}}">>,
-            <<"value">> := <<"exit test">>
+            <<"id">> := _,
+            <<"crashed">> := true,
+            <<"current">> := true,
+            <<"name">> := <<"fake {initial_call,{testmod,testfun,0}}">>,
+            <<"stacktrace">> := _
         },
         ExceptionValue
     ),
