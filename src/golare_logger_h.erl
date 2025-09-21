@@ -134,7 +134,7 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
             };
         Fun when is_function(Fun, 2) ->
             Config = #{
-                depth => 5,
+                depth => unlimited,
                 chars_limit => unlimited,
                 single_line => false
             },
@@ -179,6 +179,51 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
                             value => print(lists:keyfind(reason, 1, Info))
                         }
                     ]
+                }
+            };
+        #{
+            label := {gen_server, _} = Label,
+            name := Name,
+            reason := Reason0,
+            client_info := ClientInfo
+        } ->
+            case ClientInfo of
+                undefined ->
+                    ClientThread = [];
+                {ClientPid, {ClientName, ClientTrace}} ->
+                    ClientThread = [
+                        #{
+                            id => print(ClientPid),
+                            name => print(ClientName),
+                            crashed => true,
+                            stacktrace => #{
+                                frames => [frame(F) || F <- ClientTrace]
+                            }
+                        }
+                    ]
+            end,
+            case Reason0 of
+                {_Reason, [{_Mod, _Fun, _A, _Opts} | _] = ServerTrace} when
+                    is_atom(_Mod), is_atom(_Fun), is_list(_Opts)
+                ->
+                    ServerThread = [
+                        #{
+                            id => print(self()),
+                            name => print(Name),
+                            state => print(Label),
+                            crashed => true,
+                            current => true,
+                            stacktrace => #{
+                                frames => [frame(F) || F <- ServerTrace]
+                            }
+                        }
+                    ];
+                _ ->
+                    ServerThread = []
+            end,
+            Event1#{
+                threads => #{
+                    values => ServerThread ++ ClientThread
                 }
             };
         _ ->
