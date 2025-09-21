@@ -124,48 +124,59 @@ logger_name(Event, _) ->
 describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}}) when
     is_map(TopReport)
 ->
-    Formatted =
-        case ReportFun of
-            Fun when is_function(Fun, 1) ->
-                Fun(TopReport);
-            Fun when is_function(Fun, 2) ->
-                Config = #{
-                    depth => 5,
-                    chars_limit => unlimited,
-                    single_line => false,
-                    encoding => utf8
-                },
-                Fun(TopReport, Config)
-        end,
+    case ReportFun of
+        Fun when is_function(Fun, 1) ->
+            {FormatString, Params} = Fun(TopReport),
+            LogEntry = #{
+                formatted => format(FormatString, Params),
+                message => unicode:characters_to_binary(FormatString),
+                params => [format("~tp", [P]) || P <- Params]
+            };
+        Fun when is_function(Fun, 2) ->
+            Config = #{
+                depth => 5,
+                chars_limit => unlimited,
+                single_line => false,
+                encoding => utf8
+            },
+            Formatted = Fun(TopReport, Config),
+            LogEntry = #{
+                formatted => unicode:characters_to_binary(Formatted)
+            }
+    end,
     Event1 = Event0#{
-        logentry => #{
-            formatted => iolist_to_binary(Formatted)
-        }
+        logentry => LogEntry
     },
     case TopReport of
         #{label := {proc_lib, crash} = Label, report := [Info | _]} ->
-            {error_info, {ErrorClass, Reason, Trace}} = lists:keyfind(error_info, 1, Info),
+            case lists:keyfind(error_info, 1, Info) of
+                false ->
+                    Value = #{};
+                {error_info, {ErrorClass, Reason, Trace}} ->
+                    Value = #{
+                        value => print(ErrorClass, Reason),
+                        stacktrace =>
+                            case [frame(T) || T <- Trace] of
+                                [] -> #{};
+                                Frames -> #{frames => lists:reverse(Frames)}
+                            end
+                    }
+            end,
             Event1#{
                 exception => #{
                     values => [
-                        #{
-                            type => print(Label, lists:keyfind(initial_call, 1, Info)),
-                            value => print(ErrorClass, Reason),
-                            stacktrace =>
-                                case [frame(T) || T <- Trace] of
-                                    [] -> #{};
-                                    Frames -> #{frames => lists:reverse(Frames)}
-                                end
+                        Value#{
+                            type => print(Label, lists:keyfind(initial_call, 1, Info))
                         }
                     ]
                 }
             };
-        #{label := {supervisor, error}, report := Info} ->
+        #{label := {supervisor, _} = Label, report := Info} ->
             Event1#{
                 exception => #{
                     values => [
                         #{
-                            type => print(lists:keyfind(supervisor, 1, Info)),
+                            type => print_list([Label, lists:keyfind(supervisor, 1, Info)]),
                             value => print(lists:keyfind(reason, 1, Info))
                         }
                     ]
