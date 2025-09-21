@@ -114,10 +114,10 @@ event_timestamp(#{meta := #{time := MicrosecondEpoch}}) ->
     Rfc3339 = calendar:system_time_to_rfc3339(MicrosecondEpoch, Opts),
     iolist_to_binary(Rfc3339).
 
-logger_name(Event, #{meta := #{mfa := {M, F, A}}}) ->
-    Event#{logger => format("~s:~s/~b", [M, F, A])};
 logger_name(Event, #{msg := {report, #{label := Label}}}) ->
     Event#{logger => format("~p", [Label])};
+logger_name(Event, #{meta := #{mfa := {M, F, A}}}) ->
+    Event#{logger => format("~s:~s/~b", [M, F, A])};
 logger_name(Event, _) ->
     Event.
 
