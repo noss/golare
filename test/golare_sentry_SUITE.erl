@@ -68,6 +68,7 @@ groups() ->
             format_log,
             format_log_mfa,
             report_map,
+            supervisor_crash,
             proc_lib_crash
         ]}
     ].
@@ -199,6 +200,55 @@ format_log_mfa(_Config) ->
             <<"exception">> := _
         },
         Item
+    ),
+    ok.
+
+supervisor_crash(_Config) ->
+    Error = crash,
+    CrashReport = [
+        {supervisor, {local, test}},
+        {errorContext, Error},
+        {reason, test_reason},
+        {offender, []}
+    ],
+    Report =
+        {report, #{
+            label => {supervisor, Error},
+            report => CrashReport
+        }},
+    Meta = #{
+        domain => [otp, sasl],
+        report_cb => fun supervisor:format_log/2,
+        logger_formatter => #{title => "SUPERVISOR REPORT"},
+        error_logger => #{
+            tag => error_report, type => supervisor_report, report_cb => fun supervisor:format_log/2
+        }
+    },
+    LogItem = #{level => error, meta => Meta#{time => 0}, msg => Report},
+    {ok, EventId} = golare_logger_h:log(LogItem, #{}),
+    {_, Item} = wait_for(EventId),
+    ct:pal(default, "Captured: ~p", [Item]),
+    ?assertMatch(
+        #{
+            <<"level">> := <<"error">>,
+            <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
+            <<"logger">> := <<"{supervisor,crash}">>,
+            <<"logentry">> := #{
+                <<"formatted">> := _
+            },
+            <<"exception">> := #{
+                <<"values">> := [_Values]
+            }
+        },
+        Item
+    ),
+    #{<<"exception">> := #{<<"values">> := [ExceptionValue]}} = Item,
+    ?assertMatch(
+        #{
+            <<"type">> := <<"{supervisor,crash} {supervisor,{local,test}}">>,
+            <<"value">> := <<"{reason,test_reason}">>
+        },
+        ExceptionValue
     ),
     ok.
 
