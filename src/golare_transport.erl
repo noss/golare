@@ -79,6 +79,7 @@ init([]) ->
     {ok, started, State, Actions}.
 
 terminate(_Reason, _State, _Data) ->
+    ok = quickrand_cache:destroy(),
     ok = remove_logger(),
     ok.
 
