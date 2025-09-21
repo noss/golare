@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
-%% @doc golare top level supervisor.
+%% @doc crashy top level supervisor.
 %% @end
 %%%-------------------------------------------------------------------
 
--module(golare_sup).
+-module(crashy_sup).
 
 -behaviour(supervisor).
 
@@ -22,14 +22,7 @@ init([]) ->
         intensity => 10,
         period => 60
     },
-    ChildSpecs = [connection_childspec()],
+    ChildSpecs = [crashy_server:childspec()],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
-
-connection_childspec() ->
-    #{
-        id => transport,
-        start => {golare_transport, start_link, []},
-        shutdown => 5_000
-    }.
