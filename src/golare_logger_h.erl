@@ -53,7 +53,6 @@ filter_config(Config) ->
 
 -spec log(logger:log_event(), logger_handler:config()) -> term().
 log(LogEvent, _Config) ->
-    %erlang:display(LogEvent),
     try
         Event0 = #{
             level => sentry_level(LogEvent),
@@ -66,24 +65,22 @@ log(LogEvent, _Config) ->
         exit:{noproc, _} ->
             ok;
         Type:Rsn:Trace ->
-            Crash = #{
-                logger => ?MODULE,
-                logentry => #{
-                    formatted => print({Type, Rsn, Trace}),
-                    message => <<"Crash in golare_logger_h">>
+            ExceptionValue0 =
+                #{
+                    type => <<"golare sdk crash">>,
+                    value => format("~s:~tp", [Type, Rsn])
                 },
+            case [frame(T) || T <- Trace] of
+                [] ->
+                    ExceptionValue = ExceptionValue0;
+                Frames ->
+                    ExceptionValue = ExceptionValue0#{
+                        stacktrace => #{frames => lists:reverse(Frames)}
+                    }
+            end,
+            Crash = #{
                 exception => #{
-                    values => [
-                        #{
-                            type => <<"sdk crash">>,
-                            value => print(Rsn),
-                            stacktrace =>
-                                case [frame(T) || T <- Trace] of
-                                    [] -> null;
-                                    Frames -> #{frames => lists:reverse(Frames)}
-                                end
-                        }
-                    ]
+                    values => [ExceptionValue]
                 }
             },
             golare:capture_event(Crash)
@@ -124,7 +121,9 @@ logger_name(Event, #{msg := {report, #{label := Label}}}) ->
 logger_name(Event, _) ->
     Event.
 
-describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}}) ->
+describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}}) when
+    is_map(TopReport)
+->
     Formatted =
         case ReportFun of
             Fun when is_function(Fun, 1) ->
@@ -162,14 +161,12 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
                 }
             };
         #{label := {supervisor, error}, report := Info} ->
-            Supervisor = lists:keyfind(supervisor, 1, Info),
-            Reason = lists:keyfind(reason, 1, Info),
             Event1#{
                 exception => #{
                     values => [
                         #{
-                            type => print(Supervisor),
-                            value => print(Reason)
+                            type => print(lists:keyfind(supervisor, 1, Info)),
+                            value => print(lists:keyfind(reason, 1, Info))
                         }
                     ]
                 }
@@ -182,9 +179,22 @@ describe(E0, #{msg := {report, Report}, meta := Meta}) when is_map(Report) ->
     case maps:with(Fields, Report) of
         Map when map_size(Map) > 0 ->
             Values = [{F, maps:get(F, Map)} || F <- Fields, is_map_key(F, Map)],
-            Message = format("~p", [Values]);
+            Message = format("~tkp", [Values]);
         _ ->
-            Message = print(Report)
+            Message = format("~tkp", [Report])
+    end,
+    E1 = E0#{
+        logentry =>
+            #{formatted => Message}
+    },
+    describe_log(E1, Message, Report, Meta);
+describe(E0, #{msg := {report, Report}, meta := Meta}) when is_list(Report) ->
+    Fields = [message, msg, reason],
+    case [lists:keyfind(F, 1, Report) || F <- Fields, lists:keymember(F, 1, Report)] of
+        [] ->
+            Message = format("~tkp", [Report]);
+        Values ->
+            Message = format("~tkp", [Values])
     end,
     E1 = E0#{
         logentry =>
@@ -213,7 +223,12 @@ describe(Event0, #{msg := Fallback}) ->
             #{formatted => print(Fallback)}
     }.
 
-describe_log(E0, Message, Report, Meta) ->
+describe_log(E0, Message, Report, Meta) when is_list(Report) ->
+    E1 = maybe_mfa(E0, Message, Meta),
+    E1#{
+        extra => maps:from_list([{K, print(V)} || {K, V} <- Report, is_atom(K)])
+    };
+describe_log(E0, Message, Report, Meta) when is_map(Report) ->
     E1 = maybe_mfa(E0, Message, Meta),
     E1#{
         extra => #{K => print(V) || K := V <- Report, is_atom(K)}
@@ -240,7 +255,7 @@ frame({M, F, A, Opts}) ->
         _ when is_integer(A) -> ArgNum = A;
         _ when is_list(A) -> ArgNum = length(A)
     end,
-    F0 = #{function => format("~p:~p/~b", [M, F, ArgNum])},
+    F0 = #{function => format("~tp:~tp/~b", [M, F, ArgNum])},
     F1 = frame_extra(F0, lists:keyfind(file, 1, Opts)),
     F2 = frame_extra(F1, lists:keyfind(line, 1, Opts)),
     F2.
