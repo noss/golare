@@ -387,7 +387,7 @@ report_map(_Config) ->
             <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
             <<"logentry">> := #{
                 <<"formatted">> :=
-                    <<"[{msg,<<\"Controller crashed\">>},\n {reason,{party_error,{error,function_clause}}}]">>
+                    <<"<<\"Controller crashed\">>">>
             },
             <<"extra">> := #{
                 <<"class">> := _,

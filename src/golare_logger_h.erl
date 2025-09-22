@@ -251,7 +251,7 @@ describe(E0, #{msg := {report, Report}, meta := Meta}) when is_map(Report) ->
     case maps:with(Fields, Report) of
         Map when map_size(Map) > 0 ->
             Values = [{F, maps:get(F, Map)} || F <- Fields, is_map_key(F, Map)],
-            Message = hd(Values);
+            {_, Message} = hd(Values);
         _ ->
             Message = Report
     end,
@@ -266,7 +266,7 @@ describe(E0, #{msg := {report, Report}, meta := Meta}) when is_list(Report) ->
         [] ->
             Message = Report;
         Values ->
-            Message = hd(Values)
+            {_, Message} = hd(Values)
     end,
     E1 = E0#{
         logentry =>
