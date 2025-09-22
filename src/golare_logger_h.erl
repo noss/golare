@@ -251,26 +251,26 @@ describe(E0, #{msg := {report, Report}, meta := Meta}) when is_map(Report) ->
     case maps:with(Fields, Report) of
         Map when map_size(Map) > 0 ->
             Values = [{F, maps:get(F, Map)} || F <- Fields, is_map_key(F, Map)],
-            Message = format("~tkp", [Values]);
+            Message = hd(Values);
         _ ->
-            Message = format("~tkp", [Report])
+            Message = Report
     end,
     E1 = E0#{
         logentry =>
-            #{formatted => Message}
+            #{formatted => format("~tkp", [Message])}
     },
     describe_log(E1, Message, Report, Meta);
 describe(E0, #{msg := {report, Report}, meta := Meta}) when is_list(Report) ->
     Fields = [message, msg, reason],
     case [lists:keyfind(F, 1, Report) || F <- Fields, lists:keymember(F, 1, Report)] of
         [] ->
-            Message = format("~tkp", [Report]);
+            Message = Report;
         Values ->
-            Message = format("~tkp", [Values])
+            Message = hd(Values)
     end,
     E1 = E0#{
         logentry =>
-            #{formatted => Message}
+            #{formatted => format("~tkp", [Message])}
     },
     describe_log(E1, Message, Report, Meta);
 describe(E0, #{msg := {string, Raw}, meta := Meta}) ->
