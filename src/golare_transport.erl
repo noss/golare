@@ -45,7 +45,7 @@ name() -> ?MODULE.
 %%%===================================================================
 
 start_link() ->
-    %[{debug, [trace]}],
+    %Opts = [{debug, [trace]}],
     Opts = [],
     gen_statem:start_link({local, name()}, ?MODULE, [], Opts).
 
@@ -143,19 +143,27 @@ available(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
 sending(internal, send, Data) ->
-    {ok, StreamRef} = post_capture(Data, queue:last(Data#data.q)),
-    Posted = [StreamRef | Data#data.posted],
-    Q1 = queue:init(Data#data.q),
-    MaxPipeline = length(Posted) < Data#data.max_pipeline,
-    Actions =
-        case queue:is_empty(Q1) of
-            false when not MaxPipeline ->
-                [{next_event, internal, send}];
-            _ ->
-                []
-        end,
-    NextData = Data#data{q = Q1, posted = Posted},
-    {keep_state, NextData, Actions};
+    case {queue:is_empty(Data#data.q), length(Data#data.posted)} of
+        {true, 0} ->
+            {next_state, available, Data};
+        {true, N} when N > 0 ->
+            {keep_state, Data};
+        {false, N} when N >= Data#data.max_pipeline ->
+            {keep_state, Data};
+        {false, _} ->
+            {ok, StreamRef} = post_capture(Data, queue:last(Data#data.q)),
+            Posted = [StreamRef | Data#data.posted],
+            Q1 = queue:init(Data#data.q),
+            MaxPipeline = length(Posted) >= Data#data.max_pipeline,
+            case queue:is_empty(Q1) of
+                false when not MaxPipeline ->
+                    Actions = [{next_event, internal, send}];
+                _ ->
+                    Actions = []
+            end,
+            NextData = Data#data{q = Q1, posted = Posted},
+            {keep_state, NextData, Actions}
+    end;
 sending(
     info, {gun_response, Conn, StreamRef, _IsFin, Status, Headers}, Data
 ) when Conn == Data#data.conn ->
@@ -174,21 +182,11 @@ sending(
 sending(info, {gun_data, Conn, _StreamRef, nofin, _BodyChunk}, #data{conn = Conn}) ->
     keep_state_and_data;
 sending(
-    info, {gun_data, Conn, StreamRef, fin, _BodyChunk}, #data{conn = Conn, q = Q} = Data
+    info, {gun_data, Conn, StreamRef, fin, _BodyChunk}, #data{conn = Conn} = Data
 ) ->
     Posted = lists:delete(StreamRef, Data#data.posted),
     NextData = Data#data{posted = Posted},
-    MaxPipeline = length(Posted) < Data#data.max_pipeline,
-    case queue:is_empty(Q) of
-        true when Posted /= [] ->
-            {keep_state, NextData};
-        true ->
-            {next_state, available, NextData};
-        false when not MaxPipeline ->
-            {keep_state, NextData, [{next_event, internal, send}]};
-        false ->
-            {keep_state, NextData}
-    end;
+    {keep_state, NextData, [{next_event, internal, send}]};
 sending(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
@@ -203,13 +201,8 @@ rate_limited(internal, {retry_after, RetryAfter}, _Data) ->
         end,
     {keep_state_and_data, [{state_timeout, Timeout, retry}]};
 rate_limited(state_timeout, retry, Data) ->
-    case queue:is_empty(Data#data.q) of
-        true ->
-            {next_state, available, Data};
-        false ->
-            SendAction = {next_event, internal, send},
-            {next_state, sending, Data, [SendAction]}
-    end;
+    SendAction = {next_event, internal, send},
+    {next_state, sending, Data, [SendAction]};
 rate_limited(info, {gun_response, _Conn, _StreamRef, _IsFin, _Status, _Headers}, _Data) ->
     keep_state_and_data;
 rate_limited(info, {gun_data, _Conn, _StreamRef, fin, _BodyChunk}, _Data) ->
