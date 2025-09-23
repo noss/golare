@@ -202,7 +202,6 @@ describe(Event0, #{msg := {report, TopReport}, meta := #{report_cb := ReportFun}
             reason := Reason0,
             client_info := ClientInfo
         } ->
-            erlang:display(TopReport),
             ServerThread0 = #{
                 id => print(self()),
                 name => format("server ~tp", [Name]),
