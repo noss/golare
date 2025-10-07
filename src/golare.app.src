@@ -1,6 +1,6 @@
 {application, golare, [
     {description, "A sentry SDK for erlang"},
-    {vsn, "0.3.3"},
+    {vsn, "0.3.4"},
     {registered, []},
     {mod, {golare, []}},
     {applications, [
