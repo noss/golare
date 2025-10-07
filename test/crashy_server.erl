@@ -9,6 +9,8 @@
 -export([start_link/0]).
 -export([childspec/0]).
 
+-include_lib("kernel/include/logger.hrl").
+
 start_link() ->
     Opts = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Opts).
@@ -23,6 +25,15 @@ childspec() ->
 init(_Args) ->
     {ok, #{}}.
 
+handle_call({log_error, Message}, _From, State) ->
+    ?LOG_ERROR(#{message => Message}),
+    {reply, ok, State};
+handle_call({log_warning, Message}, _From, State) ->
+    ?LOG_WARNING(#{message => Message}),
+    {reply, ok, State};
+handle_call({log_info, Message}, _From, State) ->
+    ?LOG_INFO(#{message => Message}),
+    {reply, ok, State};
 handle_call({exit, Reason}, _From, _State) ->
     exit(Reason);
 handle_call({error, Reason}, _From, _State) ->
