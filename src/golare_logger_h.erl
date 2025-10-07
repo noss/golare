@@ -305,19 +305,6 @@ describe_log(E0, Message, Report, Meta) when is_map(Report) ->
         extra => #{K => print(V) || K := V <- Report, is_atom(K)}
     }.
 
-maybe_mfa(E0, Message, #{mfa := {Mod, Fun, A}, file := Filename, line := Line}) ->
-    Value = #{
-        type => print(Message),
-        stacktrace => #{
-            frames => [
-                frame({Mod, Fun, A, [{filename, Filename}, {line, Line}]})
-            ]
-        }
-    },
-    Exception = #{values => [Value]},
-    E0#{
-        exception => Exception
-    };
 maybe_mfa(E0, _Message, _Meta) ->
     E0.
 
