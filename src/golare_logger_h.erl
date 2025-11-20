@@ -2,17 +2,18 @@
 
 -behavior(logger_handler).
 
--export([add_logger/0]).
+-export([add/0]).
+-export([remove/0]).
 -export([adding_handler/1]).
 -export([removing_handler/1]).
 -export([changing_config/3]).
 -export([filter_config/1]).
 -export([log/2]).
 
-%%% Install logger
+%%% Handler management API
 
-add_logger() ->
-    case logger:get_handler_config(golare_logger_h) of
+add() ->
+    case logger:get_handler_config(golare) of
         {ok, _Config} ->
             ok;
         {error, {not_found, _}} ->
@@ -23,8 +24,11 @@ add_logger() ->
                 filter_default => log,
                 filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
             },
-            ok = logger:add_handler(golare, golare_logger_h, Config)
+            ok = logger:add_handler(golare, ?MODULE, Config)
     end.
+
+remove() ->
+    ok = logger:remove_handler(golare).
 
 %%% logger_handler callbacks
 
