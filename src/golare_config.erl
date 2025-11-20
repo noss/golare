@@ -12,7 +12,7 @@ dsn() ->
 environment() ->
     lookup("SENTRY_ENVIRONMENT", environment, production).
 
--spec logger_level() -> atom().
+-spec logger_level() -> logger:level().
 logger_level() ->
     lookup("SENTRY_LOGGER_LEVEL", logger_level, notice).
 
