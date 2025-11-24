@@ -156,8 +156,7 @@ string_log_mfa(_Config) ->
             <<"level">> := <<"warning">>,
             <<"logger">> := <<"foo:bar/0">>,
             <<"timestamp">> := <<"1970-01-01T00:00:00", _/binary>>,
-            <<"logentry">> := #{<<"formatted">> := <<"hello world">>},
-            <<"exception">> := _
+            <<"logentry">> := #{<<"formatted">> := <<"hello world">>}
         },
         Item
     ),
@@ -196,8 +195,7 @@ format_log_mfa(_Config) ->
                 <<"message">> := <<"format ~b">>,
                 <<"formatted">> := <<"format 42">>,
                 <<"params">> := [_]
-            },
-            <<"exception">> := _
+            }
         },
         Item
     ),

@@ -53,12 +53,10 @@ context_os() ->
 context_os({unix, linux}) ->
     try
         {ok, ReleaseInfo} = file:read_file("/etc/os-release"),
-        {Mj, Mi, Pa} = os:version(),
-        OsVersion = iolist_to_binary(io_lib:format("~b.~b.~b", [Mj, Mi, Pa])),
         Context = #{
             type => os,
             name => linux,
-            version => OsVersion
+            version => os_version()
         },
         Items = binary:split(ReleaseInfo, <<"\n">>, [global, trim_all]),
         ExtractFun = fun
@@ -74,7 +72,29 @@ context_os({unix, linux}) ->
         Distribution = lists:filtermap(ExtractFun, Items),
         maps:merge(Context, maps:from_list(Distribution))
     catch
-        _ -> null
+        _:_ -> #{type => os, name => linux, version => unknown}
+    end;
+context_os({unix, darwin}) ->
+    try
+        SWVers = maps:from_list([
+            {string:trim(K), string:trim(V)} ||
+            Line <- string:split(iolist_to_binary(os:cmd("sw_vers")), "\n", all),
+            [K, V] <- [string:split(Line, ":")]
+        ]),
+        #{
+            <<"BuildVersion">> := BuildVersion,
+            <<"ProductName">> := ProductName,
+            <<"ProductVersion">> := ProductVersion
+        } = SWVers,
+        #{
+            type => os,
+            name => ProductName,
+            version => ProductVersion,
+            build => BuildVersion,
+            kernel_version => os_version()
+        }
+    catch
+        _:_ -> #{type => os, name => macOS}
     end;
 context_os(_) ->
     null.
@@ -106,3 +126,7 @@ process_request() ->
         undefined ?= erlang:get({golare, request}),
         null
     end.
+
+os_version() ->
+    {Mj, Mi, Pa} = os:version(),
+    iolist_to_binary(io_lib:format("~b.~b.~b", [Mj, Mi, Pa])).
