@@ -64,7 +64,7 @@ capture(Capture) ->
 
 init([]) ->
     quickrand_cache:init(),
-    ok = add_logger(),
+    golare_logger_h:add(),
     State = #data{
         dsn = golare_config:dsn(),
         q = queue:new(),
@@ -80,7 +80,7 @@ init([]) ->
 
 terminate(_Reason, _State, _Data) ->
     ok = quickrand_cache:destroy(),
-    ok = remove_logger(),
+    golare_logger_h:remove(),
     ok.
 
 format_status(Status) ->
@@ -128,7 +128,6 @@ started(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
 connecting(info, {gun_up, Conn, _Protocol}, #data{conn = Conn} = Data) ->
-    ok = add_logger(),
     {next_state, available, Data};
 connecting(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
@@ -304,22 +303,3 @@ overflow(Q, MaxLen) ->
         _ ->
             Q
     end.
-
-add_logger() ->
-    case logger:get_handler_config(golare) of
-        {ok, _Config} ->
-            ok;
-        {error, {not_found, _}} ->
-            Level = golare_config:logger_level(),
-            Config = #{
-                config => #{},
-                level => Level,
-                filter_default => log,
-                filters => [{golare, {fun logger_filters:domain/2, {stop, sub, [golare]}}}]
-            },
-            ok = logger:add_handler(golare, golare_logger_h, Config)
-    end.
-
-remove_logger() ->
-    _ = logger:remove_handler(golare),
-    ok.
