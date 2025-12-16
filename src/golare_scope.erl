@@ -77,8 +77,8 @@ context_os({unix, linux}) ->
 context_os({unix, darwin}) ->
     try
         SWVers = maps:from_list([
-            {string:trim(K), string:trim(V)} ||
-            Line <- string:split(iolist_to_binary(os:cmd("sw_vers")), "\n", all),
+            {string:trim(K), string:trim(V)}
+         || Line <- string:split(iolist_to_binary(os:cmd("sw_vers")), "\n", all),
             [K, V] <- [string:split(Line, ":")]
         ]),
         #{
