@@ -10,7 +10,6 @@
 -export([context_os/0]).
 -export([context_runtime/0]).
 -export([process_user/0]).
--export([process_transaction/0]).
 -export([process_request/0]).
 
 global_sdk() ->
@@ -110,21 +109,15 @@ context_runtime() ->
     }.
 
 process_user() ->
-    maybe
-        undefined ?= erlang:get({golare, user}),
-        null
-    end.
-
-process_transaction() ->
-    maybe
-        undefined ?= erlang:get({golare, transaction}),
-        null
+    case sentry:get_user() of
+        undefined -> null;
+        U -> U
     end.
 
 process_request() ->
-    maybe
-        undefined ?= erlang:get({golare, request}),
-        null
+    case sentry:get_request() of
+        undefined -> null;
+        R -> R
     end.
 
 os_version() ->

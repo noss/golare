@@ -54,8 +54,8 @@ set_global_scopes() ->
 
 set_process_scopes() ->
     ScopeDefaults = #{
-        user => fun golare_scope:process_user/0,
-        transaction => fun golare_scope:process_transaction/0
+        request => fun golare_scope:process_request/0,
+        user => fun golare_scope:process_user/0
     },
     ScopeOverrides = application:get_env(golare, process_scope, #{}),
     ProcessScope = maps:merge(ScopeDefaults, ScopeOverrides),
