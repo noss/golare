@@ -37,6 +37,8 @@
     ip := user_ip_address()
 }.
 
+-export_type([request_context/0, user_context/0]).
+
 -spec get_request() -> request_context() | undefined.
 get_request() ->
     erlang:get(pdict_key(request)).
