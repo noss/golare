@@ -16,13 +16,13 @@
 -type request_env() :: #{atom() | binary() => binary()}.
 
 -type request_context() :: #{
-    method := request_method(),
-    url := request_url(),
-    qs := request_qs(),
-    data := request_data(),
-    cookies := request_cookies(),
-    headers := request_headers(),
-    env := request_env()
+    method => request_method(),
+    url => request_url(),
+    qs => request_qs(),
+    data => request_data(),
+    cookies => request_cookies(),
+    headers => request_headers(),
+    env => request_env()
 }.
 
 -type user_id() :: binary().
@@ -31,10 +31,10 @@
 -type user_ip_address() :: binary().
 
 -type user_context() :: #{
-    id := user_id(),
-    username := user_name(),
-    email := user_email(),
-    ip := user_ip_address()
+    id => user_id(),
+    username => user_name(),
+    email => user_email(),
+    ip => user_ip_address()
 }.
 
 -export_type([request_context/0, user_context/0]).
