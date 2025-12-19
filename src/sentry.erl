@@ -5,10 +5,20 @@
 -export([add_request/1]).
 -export([add_request_data/1]).
 -export([add_request_env/1]).
+-export([clear_request/0]).
 
 -export([get_user/0]).
 -export([set_user/1]).
 -export([add_user/1]).
+-export([clear_user/0]).
+
+-export([get_tags/0]).
+-export([set_tags/1]).
+-export([add_tags/1]).
+-export([add_tag/2]).
+-export([clear_tags/0]).
+
+-export([clear/0]).
 
 -type request_method() :: atom() | binary().
 -type request_url() :: binary().
@@ -41,8 +51,11 @@
     ip => user_ip_address()
 }.
 
+-type tag_context() :: #{binary() | atom() => binary()}.
+
 -export_type([request_context/0, request_data/0, request_env/0]).
 -export_type([user_context/0]).
+-export_type([tag_context/0]).
 
 -spec get_request() -> request_context() | undefined.
 get_request() ->
@@ -82,6 +95,10 @@ add_request_env(ReqEnv) ->
             set_request(PrevReqContext#{env := maps:merge(PrevEnv, ReqEnv)})
     end.
 
+-spec clear_request() -> request_context() | undefined.
+clear_request() ->
+    erlang:erase(pdict_key(request)).
+
 -spec get_user() -> user_context() | undefined.
 get_user() ->
     erlang:get(pdict_key(user)).
@@ -100,5 +117,48 @@ add_user(UserContext) ->
             set_user(maps:merge(PrevUser, UserContext))
     end.
 
+-spec clear_user() -> user_context() | undefined.
+clear_user() ->
+    erlang:erase(pdict_key(user)).
+
+-spec get_tags() -> tag_context() | undefined.
+get_tags() ->
+    erlang:get(pdict_key(tags)).
+
+-spec set_tags(tag_context()) -> ok.
+set_tags(Tags) ->
+    erlang:put(pdict_key(tags), Tags),
+    ok.
+
+-spec add_tags(tag_context()) -> ok.
+add_tags(Tags) ->
+    case get_tags() of
+        undefined ->
+            set_tags(Tags);
+        PrevTags ->
+            set_tags(maps:merge(PrevTags, Tags))
+    end.
+
+-spec add_tag(atom(), binary()) -> ok.
+add_tag(Key, Value) ->
+    case get_tags() of
+        undefined ->
+            set_tags(#{Key => Value});
+        PrevTags ->
+            set_tags(PrevTags#{Key => Value})
+    end.
+
+-spec clear_tags() -> tag_context() | undefined.
+clear_tags() ->
+    erlang:erase(pdict_key(tags)).
+
+-spec clear() -> ok.
+clear() ->
+    clear_request(),
+    clear_user(),
+    clear_tags(),
+    ok.
+
+pdict_key(tags) -> sentry_tags;
 pdict_key(user) -> sentry_user;
 pdict_key(request) -> sentry_request.
