@@ -8,6 +8,7 @@
 
 -export([get_user/0]).
 -export([set_user/1]).
+-export([add_user/1]).
 
 -type request_method() :: atom() | binary().
 -type request_url() :: binary().
@@ -89,6 +90,15 @@ get_user() ->
 set_user(UserContext) ->
     erlang:put(pdict_key(user), UserContext),
     ok.
+
+-spec add_user(user_context()) -> ok.
+add_user(UserContext) ->
+    case get_user() of
+        undefined ->
+            set_user(UserContext);
+        PrevUser ->
+            set_user(maps:merge(PrevUser, UserContext))
+    end.
 
 pdict_key(user) -> sentry_user;
 pdict_key(request) -> sentry_request.
