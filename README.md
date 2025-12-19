@@ -14,6 +14,13 @@ OTP Logger
 Golare will register itself as an OTP logger handler. The handler will re-shape the logged event to be a sentry event, and send it to the
 transport `gen_statem`.
 
+Process scope
+-----
+
+The `sentry` module can be used to put values in the process dictionary for sentry to use if capturing events in the same process.
+
+Currently supported is http request context, and user context.
+
 Transport states
 -----
 
