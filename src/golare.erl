@@ -54,6 +54,7 @@ set_global_scopes() ->
 
 set_process_scopes() ->
     ScopeDefaults = #{
+        tags => fun golare_scope:process_tags/0,
         request => fun golare_scope:process_request/0,
         user => fun golare_scope:process_user/0
     },

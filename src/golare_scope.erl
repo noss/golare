@@ -9,6 +9,7 @@
 -export([global_contexts/0]).
 -export([context_os/0]).
 -export([context_runtime/0]).
+-export([process_tags/0]).
 -export([process_user/0]).
 -export([process_request/0]).
 
@@ -107,6 +108,12 @@ context_runtime() ->
         version => Vsn,
         raw_description => Raw
     }.
+
+process_tags() ->
+    case sentry:get_tags() of
+        undefined -> null;
+        T -> T
+    end.
 
 process_user() ->
     case sentry:get_user() of
