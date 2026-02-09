@@ -9,6 +9,7 @@
 
 -export([start/2, stop/1]).
 
+-export([event/2]).
 -export([capture_event/1]).
 
 -export([test_logger/1]).
@@ -24,6 +25,36 @@ start(normal, _StartArgs) ->
 stop(_State) ->
     ok.
 
+-doc "Compose a Sentry event from attributes and interface objects.".
+-spec event(Attrs, Interfaces) -> Event when
+    Attrs :: #{atom() => term()},
+    Interfaces :: [golare_interface:t()],
+    Event :: map().
+event(Attrs, Interfaces) ->
+    Attributes = [
+        {required, timestamp},
+        {optional, level}
+    ],
+    Event = lists:foldl(fun(Attr, Acc) -> attr(Attr, Attrs, Acc) end, #{}, Attributes),
+    mapz:deep_merge([Event|Interfaces]).
+
+attr({_, Key}, Attrs, Acc) when is_map_key(Key, Attrs) ->
+    Value = maps:get(Key, Attrs),
+    case is_valid(Key, Value) of
+        true -> Acc#{Key => Value};
+        false -> error({invalid_attr, Key, Value})
+    end;
+attr({required, Key}, _Attrs, Acc) ->
+    Acc#{Key => default(Key)};
+attr({optional, _Attr}, _Attrs, Acc) ->
+    Acc.
+
+is_valid(timestamp, Value) -> is_integer(Value) orelse is_binary(Value);
+is_valid(level, Value) -> is_atom(Value).
+
+default(timestamp) -> erlang:system_time(second).
+
+-spec capture_event(json:encode_value()) -> ok.
 capture_event(Event) ->
     ScopeFuns = persistent_term:get({golare, process_scope}, #{}),
     ScopeValues = #{K => F() || K := F <- ScopeFuns, is_function(F, 0)},
